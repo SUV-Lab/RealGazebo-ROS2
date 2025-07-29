@@ -1,0 +1,18 @@
+# example.yaml
+
+px4_target:
+# - A mapping of build targets identified by unique numeric keys.
+  0 : /home/user/realgazebo/PX4-Autopilot
+  # 1: /path/to/your/PX4-Autopilot
+
+vehicles:
+# - Each entity is identified by a unique numeric key (e.g., 0, 1, 2, 3).
+#  - 'type': Specifies the type of the entity.
+#  - 'build_target': References the PX4 target defined above, determining which PX4-Autopilot build to use.
+#  - 'spawnpoint' : Defines the spawn location in a 3D space using coordinates and a yaw value (in radians) (x, y, z, yaw).
+#  - 'recieve_image' (optional, default: False): If True, the entity will receive image data.
+#  - 'view_image' (optional, default: False): If True, the entity will view image data. Note that if 'view_image' is set to True, 'recieve_image' will automatically be set to True.
+  0 :
+    type : rover
+    build_target : 0
+    spawnpoint : (-280, 286, 0, -1.57)
