@@ -107,9 +107,13 @@ class PX4ROS2(Node):
                     self.control_setpoint(self.vehicle_local_position_msg_.x, self.vehicle_local_position_msg_.y - 300, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
                 elif self.system_id_ == 2:
                     self.control_setpoint(self.vehicle_local_position_msg_.x, self.vehicle_local_position_msg_.y - 300, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
-                elif self.system_id_ == 8:
-                    self.control_setpoint(self.vehicle_local_position_msg_.x - 100, self.vehicle_local_position_msg_.y, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
+                elif self.system_id_ == 6:
+                    self.control_setpoint(self.vehicle_local_position_msg_.x, self.vehicle_local_position_msg_.y - 300, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
+                elif self.system_id_ == 7:
+                    self.control_setpoint(self.vehicle_local_position_msg_.x, self.vehicle_local_position_msg_.y - 300, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
                 elif self.system_id_ == 9:
+                    self.control_setpoint(self.vehicle_local_position_msg_.x - 100, self.vehicle_local_position_msg_.y, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
+                elif self.system_id_ == 10:
                     self.control_setpoint(self.vehicle_local_position_msg_.x - 100, self.vehicle_local_position_msg_.y, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
                 else:
                     self.control_setpoint(self.vehicle_local_position_msg_.x, self.vehicle_local_position_msg_.y - 70, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)

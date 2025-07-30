@@ -217,9 +217,8 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             'vehicle',
-            # default_value='/home/user/ws/Colosseum/ros2/src/realgazebo/yaml/example.yaml',
-            default_value='/home/kmk/docker/colosseum_ws/ws/ros2_ws/src/realgazebo/yaml/example.yaml',
-            description='path to yaml file  ex)/home/user/cisim3/Colosseum/ros2/src/realgazebo/yaml/example.yaml'
+            default_value='/home/user/realgazebo/RealGazebo-ROS2/src/realgazebo/yaml/example.yaml',
+            description='path to yaml file  ex)/home/user/realgazebo/RealGazebo-ROS2/src/realgazebo/yaml/example.yaml'
         )
     )
 

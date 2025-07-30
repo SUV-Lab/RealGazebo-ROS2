@@ -2,7 +2,7 @@
 
 px4_target:
 # - A mapping of build targets identified by unique numeric keys.
-  0 : /home/user/realgazebo/PX4-Autopilot
+  0 :/home/user/realgazebo/RealGazebo-PX4-Autopilot
   # 1: /path/to/your/PX4-Autopilot
 
 vehicles:
