@@ -2,6 +2,9 @@ import os
 import random
 import yaml
 import ast
+
+from jinja2 import Environment, FileSystemLoader
+
 from collections import defaultdict
 
 from ament_index_python import get_package_prefix
@@ -23,8 +26,10 @@ from launch.actions import (
 )
 from launch.event_handlers import OnProcessStart, OnProcessExit
 
-support_vehicle = ["iris", "x500", "rover", "boat", "lc_62", "wamv", "ugv_kimm"]
-without_px4 = ["ugv_kimm"]
+support_vehicle = ["x500", "rover_ackermann", "lc_62", "boat"]
+without_px4 = []
+
+# Vehicle type to autostart ID mapping (will be populated dynamically)
 
 def create_timed_actions(actions_list, initial_delay, interval):
     timed_actions = []
@@ -39,11 +44,72 @@ def create_timed_actions(actions_list, initial_delay, interval):
     return timed_actions
 
 def check_px4_build(px4_src_path):
-    if not os.path.exists(f'{px4_src_path}/build/px4_sitl_default/build_gazebo-classic/'):
+    if not os.path.exists(f'{px4_src_path}/build/px4_sitl_default/build_gz/'):
         print(
-            f"Cannot find PX4 build file. Check your path or Please run the command 'make px4_sitl_default gazebo_classic' in the path {px4_src_path} to build it first.")
+            f"Cannot find PX4 build file. Check your path or Please run the command 'make px4_sitl_default gz_500' in the path {px4_src_path} to build it first.")
         return False
     return True
+
+def scan_airframes_directory(px4_build_path):
+    """Scan PX4 airframes directory and build vehicle type to autostart ID mapping"""
+    airframes_dir = os.path.join(px4_build_path, "ROMFS/px4fmu_common/init.d-posix/airframes")
+    vehicle_autostart_map = {}
+    
+    if not os.path.exists(airframes_dir):
+        print(f"Warning: Airframes directory not found at {airframes_dir}")
+        return vehicle_autostart_map
+    
+    try:
+        for filename in os.listdir(airframes_dir):
+            # Look for files matching pattern: {autostart_id}_gz_{vehicle_type}
+            if filename.startswith(tuple('0123456789')) and '_gz_' in filename:
+                parts = filename.split('_gz_')
+                if len(parts) == 2:
+                    autostart_id = parts[0]
+                    vehicle_type = parts[1]
+                    vehicle_autostart_map[vehicle_type] = autostart_id
+    except Exception as e:
+        print(f"Error scanning airframes directory: {e}")
+    
+    return vehicle_autostart_map
+
+def get_autostart_id(vehicle_type, px4_build_path):
+    """Get PX4 autostart ID for vehicle type by scanning airframes directory"""
+    vehicle_autostart_map = scan_airframes_directory(px4_build_path)
+    
+    if vehicle_type not in vehicle_autostart_map:
+        available_types = list(vehicle_autostart_map.keys())
+        print(f"ERROR: No airframe file found for vehicle type '{vehicle_type}'")
+        print(f"Available vehicle types: {available_types}")
+        print(f"Please check if airframe file '{vehicle_type}' exists in:")
+        print(f"  {px4_build_path}/ROMFS/px4fmu_common/init.d-posix/airframes/")
+        print(f"Expected file format: {{autostart_id}}_gz_{vehicle_type}")
+        raise ValueError(f"Unsupported vehicle type: {vehicle_type}")
+    
+    return vehicle_autostart_map[vehicle_type]
+
+def create_px4_command(vehicle, vehicle_type):
+    """Create proper PX4 command with environment variables and arguments"""
+    autostart_id = get_autostart_id(vehicle_type, vehicle['build_target'])
+    
+    # Create environment variables
+    env_vars = {
+        'PX4_GZ_STANDALONE': '1',
+        'PX4_SYS_AUTOSTART': autostart_id,
+        'PX4_UXRCE_DDS_NS' : f"vehicle{vehicle['id'] + 1}",
+        'PX4_GZ_WORLD' : 'c-track'
+    }
+    
+    # PX4 binary path
+    px4_binary = f"{vehicle['build_target']}/build/px4_sitl_default/bin/px4"
+    
+    # Command arguments
+    cmd_args = [
+        px4_binary,
+        '-i', str(vehicle['id'])
+    ]
+    
+    return cmd_args, env_vars
 
 def print_usage():
     print("""Usage: ros2 launch realgazebo realgazebo.launch.py server_ip:=[your_server_ip_address] vehicle:=[path to yaml file]""")
@@ -51,7 +117,6 @@ def print_usage():
 def validate_yaml(file_path):
     with open(file_path, 'r') as file:
         data = yaml.safe_load(file)
-
     px4_targets = data.get('px4_target', {})
     for target, path in px4_targets.items():
         if not check_px4_build(path):
@@ -66,12 +131,21 @@ def validate_yaml(file_path):
         print("Error: Vehicle keys are not starting from 0 or are not continuous.")
         return False
 
-    # Validate build_target reference
-    px4_targets = data.get('px4_target', {}).keys()
+    # Validate build_target reference and vehicle type
+    px4_target_paths = data.get('px4_target', {})
     for key, vehicle in vehicles.items():
         build_target = vehicle.get('build_target')
-        if build_target not in px4_targets:
+        if build_target not in px4_target_paths:
             print(f"Error: Vehicle {key} has an invalid build_target ({build_target}). It is not defined in px4_target.")
+            return False
+
+        # Validate vehicle type has corresponding airframe file
+        vehicle_type = vehicle.get('type')
+        build_target_path = px4_target_paths[build_target]
+        try:
+            get_autostart_id(vehicle_type, build_target_path)
+        except ValueError as e:
+            print(f"Error: Vehicle {key} validation failed: {e}")
             return False
 
         # Validate spawnpoint format
@@ -115,25 +189,34 @@ def parse_yaml_to_list(file_path):
 def launch_setup(context, *args, **kwargs):
     # Configuration
     current_package_path = get_package_share_directory('realgazebo')
-    server_ip = LaunchConfiguration('server_ip').perform(context)
+    unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
+    unreal_port = LaunchConfiguration('unreal_port').perform(context)
     vehicle_str = LaunchConfiguration('vehicle').perform(context)
     if not validate_yaml(vehicle_str):
         exit(1)
 
     vehicle_lst = parse_yaml_to_list(vehicle_str)
-    gazebo_classic_path = f"{vehicle_lst[0]['build_target']}/Tools/simulation/gazebo-classic/sitl_gazebo-classic"
+    gazebo_path = f"{vehicle_lst[0]['build_target']}/Tools/simulation/gz"
     pairs = vehicle_str.split(',')
 
     # Environments
-    model_path_env = SetEnvironmentVariable('GAZEBO_MODEL_PATH',
-                                            f'{current_package_path}/models:{gazebo_classic_path}/models')
-    plugin_path_env = SetEnvironmentVariable('GAZEBO_PLUGIN_PATH',
-                                             f"{current_package_path}/libs:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/build_gazebo-classic/")
+    model_path_env = SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH',
+                                            f'$GZ_SIM_RESOURCE_PATH:/tmp/models:{gazebo_path}/models:{gazebo_path}/worlds')
+    
+    plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
+                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins")
+
+    server_config_env = SetEnvironmentVariable('GZ_SIM_SERVER_CONFIG_PATH',
+                                               f"{vehicle_lst[0]['build_target']}/src/modules/simulation/gz_bridge/server.config")
+    
+    # it sometimes need to set GZ_IP to 127.0.0.1 or not so just use it
+    gz_ip_env = SetEnvironmentVariable('GZ_IP', '127.0.0.1')
+
+    gz_sim_pkg = get_package_share_directory('ros_gz_sim')
 
     gazebo_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('gazebo_ros'), 'launch'), '/gazebo.launch.py']),
-        launch_arguments={'world': f'{gazebo_classic_path}/worlds/c-track.world'}.items()
+        PythonLaunchDescriptionSource(PathJoinSubstitution([gz_sim_pkg, 'launch', 'gz_sim.launch.py'])),
+        launch_arguments={'gz_args': f'--verbose=1 -r {gazebo_path}/worlds/c-track.sdf'}.items()
     )
 
     uv_process_list = []
@@ -142,70 +225,73 @@ def launch_setup(context, *args, **kwargs):
     xrce_agent_process = ExecuteProcess(
         cmd=[FindExecutable(name='MicroXRCEAgent'), 'udp4', '-p', '8888'])
 
+    model_save_dir = os.path.join('/tmp', 'models')
+    os.makedirs(model_save_dir, exist_ok=True)    
+    model_list = support_vehicle + without_px4
+    print(model_list)
+
+    for model_type in model_list:
+        ## generate sdf file to /tmp/{model_type}.sdf
+        env = Environment(loader=FileSystemLoader(os.path.join(current_package_path, 'models')))
+        model = env.get_template(f'{model_type}.sdf.jinja')
+        output_model = model.render(unreal_ip=unreal_ip, unreal_port=unreal_port)
+        model_file_path = os.path.join(model_save_dir, f'{model_type}.sdf')
+        with open(model_file_path, 'w') as f:
+            f.write(output_model)
+            print(f'{model_type}.sdf is generated')
+
     for vehicle in vehicle_lst:
         vehicle_type = vehicle['type']
-        px4_sim_env = SetEnvironmentVariable('PX4_SIM_MODEL', f'gazebo-classic_{vehicle_type}')
-        uv_process_list.append(px4_sim_env)
-        ## generate sdf file to /tmp/model_X.sdf
-        jinja_cmd = [
-            f'{gazebo_classic_path}/scripts/jinja_gen.py',
-            f'{gazebo_classic_path}/models/{vehicle_type}/{vehicle_type}.sdf.jinja',
-            f'{gazebo_classic_path}',
-            '--unreal_ip', f"{server_ip}",
-            '--unreal_port', f"{5005}",
-            '--mavlink_tcp_port', f"{4560 + vehicle['id']}",
-            '--mavlink_udp_port', f"{14560 + vehicle['id']}",
-            '--mavlink_id', f"{1 + vehicle['id']}",
-            '--gst_udp_port', f"{5600 + vehicle['id']}",
-            '--video_uri', f"{5600 + vehicle['id']}",
-            '--mavlink_cam_udp_port', f"{14530 + vehicle['id']}",
-            '--output-file', f"/tmp/{vehicle_type}_{vehicle['id']}.sdf",
-        ]
 
-        jinja_process = ExecuteProcess(
-            cmd=jinja_cmd)
+        spawn_entity = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([os.path.join(gz_sim_pkg, 'launch', 'gz_spawn_model.launch.py')])),
+            launch_arguments={
+                'world': 'c-track',
+                'file': f'/tmp/models/{vehicle_type}.sdf',
+                'entity_name': f'{vehicle_type}_{vehicle["id"]}',
+                'x': f'{float(vehicle["spawnpoint"][0])}',
+                'y': f'{float(vehicle["spawnpoint"][1])}',
+                'z': f'{float(vehicle["spawnpoint"][2])}',
+                'R': '0.0',
+                'P': '0.0',
+                'Y': f'{float(vehicle["spawnpoint"][3])}'
+            }.items()
+        )
+        uv_process_list.append(spawn_entity)
 
-        uv_process_list.append(jinja_process)
-
-        spawn_entity_node = Node(
-            package='gazebo_ros',
-            executable='spawn_entity.py',
-            arguments=['-file', f"/tmp/{vehicle_type}_{vehicle['id']}.sdf", '-entity', f"{vehicle_type}_{vehicle['id']}",
-                       '-x', f"{vehicle['spawnpoint'][0]}",
-                       '-y', f"{vehicle['spawnpoint'][1]}",
-                       '-z', f"{vehicle['spawnpoint'][2]}",
-                       '-Y', f"{vehicle['spawnpoint'][3]}"])
-
-        uv_process_list.append(spawn_entity_node)
-
+        # Create PX4 process with proper autostart ID
         if vehicle_type not in without_px4:
-        # PX4
-        # build_path/bin/px4 -i $N -d "$build_path/etc" >out.log 2>err.log &
-            px4_cmd = [
-                f"{vehicle['build_target']}/build/px4_sitl_default/bin/px4",
-                '-i', f"{vehicle['id']}",
-                '-d',
-                f"{vehicle['build_target']}/build/px4_sitl_default/etc",
-                '-w', f"{vehicle['build_target']}/build/ROMFS",
-                '>out.log', '2>err.log',
-            ]
+            px4_cmd, px4_env = create_px4_command(vehicle, vehicle_type)
+            
             px4_process = ExecuteProcess(
-                cmd=px4_cmd)
+                cmd=px4_cmd,
+                additional_env=px4_env,
+            )
             uv_process_list.append(px4_process)
 
+    gz_timesync_node = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'
+        ]
+    )
 
     uv_actions_with_delays = create_timed_actions(
         uv_process_list,
-        initial_delay=10.0,
+        initial_delay=30.0,
         interval=0.5
     )
 
     nodes_to_start = [
         model_path_env,
         plugin_path_env,
+        server_config_env,
+        gz_ip_env,
         xrce_agent_process,
         gazebo_node,
         *uv_actions_with_delays,
+        gz_timesync_node
     ]
 
     return nodes_to_start
@@ -224,9 +310,17 @@ def generate_launch_description():
 
     declared_arguments.append(
         DeclareLaunchArgument(
-            'server_ip',
+            'unreal_ip',
             default_value='127.0.0.1',
             description='ip of UE5'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'unreal_port',
+            default_value='5005',
+            description='port of UE5'
         )
     )
 

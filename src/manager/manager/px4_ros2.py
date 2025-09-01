@@ -47,7 +47,7 @@ class PX4ROS2(Node):
         self.ocm_msg_qhac_.acceleration = False
         self.ocm_msg_qhac_.attitude = False
         self.ocm_msg_qhac_.body_rate = False
-        self.ocm_msg_qhac_.actuator = False
+        self.ocm_msg_qhac_.direct_actuator = False
         self.ocm_publisher_ = self.create_publisher(OffboardControlMode,
                                                     f'{self.topic_prefix_fmu_}in/offboard_control_mode',
                                                     qos_profile_sensor_data)

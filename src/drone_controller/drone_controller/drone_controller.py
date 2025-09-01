@@ -60,10 +60,10 @@ class DroneController(Node):
             case 145:
                 self.control_offboard()
             case 155:
-                self.setpoint[0] = self.vehicle_local_position_msg_.x - 50
-                self.setpoint[1] = self.vehicle_local_position_msg_.y
+                self.setpoint[0] = self.vehicle_local_position_msg_.x
+                self.setpoint[1] = self.vehicle_local_position_msg_.y - 50
                 self.setpoint[2] = self.vehicle_local_position_msg_.z
-                self.control_setpoint(self.vehicle_local_position_msg_.x - 50, self.vehicle_local_position_msg_.y, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
+                self.control_setpoint(self.vehicle_local_position_msg_.x, self.vehicle_local_position_msg_.y - 50, self.vehicle_local_position_msg_.z, self.vehicle_local_position_msg_.heading)
 
         if self.info_count > 155 and math.sqrt((self.setpoint[0] - self.vehicle_local_position_msg_.x)**2 + (self.setpoint[1] - self.vehicle_local_position_msg_.y)**2 + (self.setpoint[2] - self.vehicle_local_position_msg_.z)**2) < 1:            
             self.control_land()
@@ -162,7 +162,7 @@ class DroneController(Node):
         self.ocm_msg_qhac_.acceleration = False
         self.ocm_msg_qhac_.attitude = False
         self.ocm_msg_qhac_.body_rate = False
-        self.ocm_msg_qhac_.actuator = False
+        self.ocm_msg_qhac_.direct_actuator = False
         self.ocm_publisher_ = self.create_publisher(OffboardControlMode,
                                                     f'{self.topic_prefix_fmu_}in/offboard_control_mode',
                                                     qos_profile_sensor_data)
