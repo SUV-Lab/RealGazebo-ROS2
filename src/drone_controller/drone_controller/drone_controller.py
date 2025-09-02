@@ -21,22 +21,32 @@ class nav_state(Enum):
     NAVIGATION_STATE_AUTO_MISSION = 3         # Auto mission mode
     NAVIGATION_STATE_AUTO_LOITER = 4          # Auto loiter mode
     NAVIGATION_STATE_AUTO_RTL = 5             # Auto return to launch mode
-    NAVIGATION_STATE_UNUSED3 = 8              # Free slot
-    NAVIGATION_STATE_UNUSED = 9               # Free slot
+    NAVIGATION_STATE_POSITION_SLOW = 6
+    NAVIGATION_STATE_FREE5 = 7
+    NAVIGATION_STATE_FREE4 = 8
+    NAVIGATION_STATE_FREE3 = 9
     NAVIGATION_STATE_ACRO = 10                # Acro mode
-    NAVIGATION_STATE_UNUSED1 = 11             # Free slot
+    NAVIGATION_STATE_FREE2 = 11
     NAVIGATION_STATE_DESCEND = 12             # Descend mode (no position control)
     NAVIGATION_STATE_TERMINATION = 13         # Termination mode
     NAVIGATION_STATE_OFFBOARD = 14
     NAVIGATION_STATE_STAB = 15                # Stabilized mode
-    NAVIGATION_STATE_UNUSED2 = 16             # Free slot
+    NAVIGATION_STATE_FREE1 = 16
     NAVIGATION_STATE_AUTO_TAKEOFF = 17        # Takeoff
     NAVIGATION_STATE_AUTO_LAND = 18           # Land
     NAVIGATION_STATE_AUTO_FOLLOW_TARGET = 19  # Auto Follow
     NAVIGATION_STATE_AUTO_PRECLAND = 20       # Precision land with landing target
     NAVIGATION_STATE_ORBIT = 21               # Orbit in a circle
     NAVIGATION_STATE_AUTO_VTOL_TAKEOFF = 22   # Takeoff, transition, establish loiter
-    NAVIGATION_STATE_MAX = 23
+    NAVIGATION_STATE_EXTERNAL1 = 23
+    NAVIGATION_STATE_EXTERNAL2 = 24
+    NAVIGATION_STATE_EXTERNAL3 = 25
+    NAVIGATION_STATE_EXTERNAL4 = 26
+    NAVIGATION_STATE_EXTERNAL5 = 27
+    NAVIGATION_STATE_EXTERNAL6 = 28
+    NAVIGATION_STATE_EXTERNAL7 = 29
+    NAVIGATION_STATE_EXTERNAL8 = 30
+    NAVIGATION_STATE_MAX = 31
 
 
 class DroneController(Node):

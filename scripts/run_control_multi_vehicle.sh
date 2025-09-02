@@ -1,1 +1,1 @@
-docker exec -it -u user realgazebo bash -c "source /opt/ros/humble/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo control_multi_vehicle.launch.py"
+docker exec -it -u user realgazebo bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo control_multi_vehicle.launch.py"
