@@ -21,7 +21,7 @@ docker run --gpus all --runtime=nvidia -d -it --privileged \
 -v /dev:/dev:rw \
 --hostname $(hostname) \
 --network host \
---name "$container_name" mdeagewt/realgazebo:0.2
+--name "$container_name" mdeagewt/realgazebo-dev:0.2
 
 docker cp $1 "$container_name":/home/user/
 

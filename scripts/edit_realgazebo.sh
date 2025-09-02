@@ -12,5 +12,5 @@ docker run --gpus all --runtime=nvidia -it --privileged \
 -u user \
 --hostname $(hostname) \
 --network host \
---name "$container_name" mdeagewt/realgazebo:0.2 bash
+--name "$container_name" mdeagewt/realgazebo-dev:0.2 bash
 
