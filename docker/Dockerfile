@@ -6,70 +6,71 @@ ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
 RUN apt-get update && apt-get -y --quiet --no-install-recommends install \
-	ant \
-	binutils-dev \
-	ca-certificates \
-	ccache \
-	cmake \
-	cppcheck \
-	curl \
-	dirmngr \
-	doxygen \
-	g++-multilib \
-	gcc-multilib \
-	gdb \
-	gettext \
-	git \
-	gnupg \
-	gosu \
-	lcov \
-	libelf-dev \
-	libexpat-dev \
-	libvecmath-java \
-	libfreetype6-dev \
-	libgmp-dev \
-	libgtest-dev \
-	libisl-dev \
-	libmpc-dev \
-	libmpfr-dev \
-	libpng-dev \
-	libssl-dev \
-	lsb-release \
-	make \
-	ninja-build \
-	openssh-client \
-	openjdk-11-jre \
-	openjdk-11-jdk \
-	python3 \
-	python3-dev \
-	python3-pip \
-	python3-venv \
-	rsync \
-	screen \
-	shellcheck \
-	tzdata \
-	texinfo \
-	u-boot-tools \
-	util-linux \
-	unzip \
-	valgrind \
-	wget \
-	xsltproc \
-	zip \
+    ant \
+    binutils-dev \
+    ca-certificates \
+    ccache \
+    cmake \
+    cppcheck \
+    curl \
+    dirmngr \
+    doxygen \
+    g++-multilib \
+    gcc-multilib \
+    gdb \
+    gettext \
+    git \
+    gnupg \
+    gosu \
+    lcov \
+    libelf-dev \
+    libexpat-dev \
+    libvecmath-java \
+    libfreetype6-dev \
+    libgmp-dev \
+    libgtest-dev \
+    libisl-dev \
+    libmpc-dev \
+    libmpfr-dev \
+    libpng-dev \
+    libssl-dev \
+    lsb-release \
+    make \
+    ninja-build \
+    openssh-client \
+    openjdk-11-jre \
+    openjdk-11-jdk \
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    rsync \
+    screen \
+    shellcheck \
+    tzdata \
+    texinfo \
+    u-boot-tools \
+    util-linux \
+    unzip \
+    valgrind \
+    wget \
+    xsltproc \
+    zip \
     sudo \
-	&& apt-get -y autoremove \
-	&& apt-get clean autoclean \
-	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    xterm \
+    && apt-get -y autoremove \
+    && apt-get clean autoclean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Set java 11 as default
 RUN update-alternatives --set java $(update-alternatives --list java | grep "java-11")
 
 # gtest
 RUN cd /usr/src/gtest \
-	&& mkdir build && cd build \
-	&& cmake .. && make -j$(nproc) \
-	&& find . -name \*.a -exec cp {} /usr/lib \; \
-	&& cd .. && rm -rf build
+    && mkdir build && cd build \
+    && cmake .. && make -j$(nproc) \
+    && find . -name \*.a -exec cp {} /usr/lib \; \
+    && cd .. && rm -rf build
 
 # Python 3 dependencies installed by pip
 RUN python3 -m pip install --break-system-packages argparse argcomplete coverage cerberus empy==3.3.4 jinja2 kconfiglib \
@@ -78,21 +79,21 @@ RUN python3 -m pip install --break-system-packages argparse argcomplete coverage
 
 # manual ccache setup
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/cc \
-	&& ln -s /usr/bin/ccache /usr/lib/ccache/c++
+    && ln -s /usr/bin/ccache /usr/lib/ccache/c++
 
 # astyle v3.1
 RUN wget -q https://downloads.sourceforge.net/project/astyle/astyle/astyle%203.1/astyle_3.1_linux.tar.gz -O /tmp/astyle.tar.gz \
-	&& cd /tmp && tar zxf astyle.tar.gz && cd astyle/src \
-	&& make -f ../build/gcc/Makefile -j$(nproc) && cp bin/astyle /usr/local/bin \
-	&& rm -rf /tmp/*
+    && cd /tmp && tar zxf astyle.tar.gz && cd astyle/src \
+    && make -f ../build/gcc/Makefile -j$(nproc) && cp bin/astyle /usr/local/bin \
+    && rm -rf /tmp/*
 
 # create user with id 1001 (jenkins docker workflow default)
 RUN useradd --shell /bin/bash -u 1001 -c "" -m user && usermod -a -G dialout user
 
 # setup virtual X server
 RUN mkdir /tmp/.X11-unix && \
-	chmod 1777 /tmp/.X11-unix && \
-	chown -R root:root /tmp/.X11-unix
+    chmod 1777 /tmp/.X11-unix && \
+    chown -R root:root /tmp/.X11-unix
 ENV DISPLAY :99
 
 ENV CCACHE_UMASK 000
@@ -127,8 +128,8 @@ RUN apt-get update && apt-get install -q -y --no-install-recommends \
     python3-pytest-runner \
     python3-pytest-timeout \
     && apt-get -y autoremove \
-	&& apt-get clean autoclean \
-	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && apt-get clean autoclean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install ROS2 Jazzy
 ENV ROS_DISTRO jazzy
@@ -141,36 +142,36 @@ RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/r
 
 # install bootstrap tools
 RUN apt-get update \
-	&& apt-get install --quiet -y \
-		python3-colcon-common-extensions \
-		python3-colcon-mixin \
-		python3-rosdep \
-		python3-vcstool \
-	&& apt-get -y autoremove \
-	&& apt-get clean autoclean \
-	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && apt-get install --quiet -y \
+        python3-colcon-common-extensions \
+        python3-colcon-mixin \
+        python3-rosdep \
+        python3-vcstool \
+    && apt-get -y autoremove \
+    && apt-get clean autoclean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # install ros2 desktop
 RUN apt-get update \
-	&& apt-get install --quiet --no-install-recommends -y \
-		ros-$ROS_DISTRO-desktop \
-		ros-$ROS_DISTRO-launch-testing-ament-cmake \
-		ros-$ROS_DISTRO-ros2bag \
-		ros-$ROS_DISTRO-rosidl-generator-dds-idl \
-	&& apt-get -y autoremove \
-	&& apt-get clean autoclean \
-	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && apt-get install --quiet --no-install-recommends -y \
+        ros-$ROS_DISTRO-desktop \
+        ros-$ROS_DISTRO-launch-testing-ament-cmake \
+        ros-$ROS_DISTRO-ros2bag \
+        ros-$ROS_DISTRO-rosidl-generator-dds-idl \
+    && apt-get -y autoremove \
+    && apt-get clean autoclean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # bootstrap rosdep
 RUN rosdep init && rosdep update
 
 # setup colcon mixin and metadata
 RUN colcon mixin add default \
-		https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml \
-	&& colcon mixin update \
-	&& colcon metadata add default \
-		https://raw.githubusercontent.com/colcon/colcon-metadata-repository/master/index.yaml \
-	&& colcon metadata update
+        https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml \
+    && colcon mixin update \
+    && colcon metadata add default \
+        https://raw.githubusercontent.com/colcon/colcon-metadata-repository/master/index.yaml \
+    && colcon metadata update
 
 RUN git config --global http.postBuffer 524288000
 
@@ -202,12 +203,12 @@ RUN cd /home/user/realgazebo/RealGazebo-PX4 && ./Tools/setup/ubuntu.sh --no-nutt
 
 USER root
 RUN apt-get update \
-	&& apt-get install --quiet --no-install-recommends -y \
-	ros-$ROS_DISTRO-ros-gz \
-	ros-$ROS_DISTRO-ros-gz-sim \
-	&& apt-get -y autoremove \
-	&& apt-get clean autoclean \
-	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && apt-get install --quiet --no-install-recommends -y \
+    ros-$ROS_DISTRO-ros-gz \
+    ros-$ROS_DISTRO-ros-gz-sim \
+    && apt-get -y autoremove \
+    && apt-get clean autoclean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 USER user
 RUN cd /home/user/realgazebo/RealGazebo-PX4 \

@@ -25,7 +25,7 @@ docker run --gpus all --runtime=nvidia -d -it --privileged \
 
 docker cp $1 "$container_name":/home/user/
 
-docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") server_ip:=$2"
+docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2"
 
 docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null
