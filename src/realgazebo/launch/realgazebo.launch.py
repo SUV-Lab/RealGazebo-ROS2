@@ -192,6 +192,7 @@ def launch_setup(context, *args, **kwargs):
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
     vehicle_str = LaunchConfiguration('vehicle').perform(context)
+    headless = LaunchConfiguration('headless').perform(context).lower() == 'true'
     if not validate_yaml(vehicle_str):
         exit(1)
 
@@ -216,7 +217,7 @@ def launch_setup(context, *args, **kwargs):
 
     gazebo_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([gz_sim_pkg, 'launch', 'gz_sim.launch.py'])),
-        launch_arguments={'gz_args': f'--verbose=1 -r {gazebo_path}/worlds/c-track.sdf'}.items()
+        launch_arguments={'gz_args': f'--verbose=1 -r -s {gazebo_path}/worlds/c-track.sdf' if headless else f'--verbose=1 -r {gazebo_path}/worlds/c-track.sdf'}.items()
     )
 
     uv_process_list = []
@@ -321,6 +322,15 @@ def generate_launch_description():
             'unreal_port',
             default_value='5005',
             description='port of UE5'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'headless',
+            default_value='true',
+            description='headless mode of Gazebo',
+            choices=['true', 'false']
         )
     )
 

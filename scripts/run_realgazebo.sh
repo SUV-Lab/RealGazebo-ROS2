@@ -1,12 +1,25 @@
 #!/bin/bash
 
-# Determine GPU usage
+# Determine GPU usage and GUI mode
 USE_GPU=true
-if [[ "$1" == "--no-gpu" ]]; then
-    USE_GPU=false
-    echo "GPU option disabled."
-    shift # Remove --no-gpu argument
-fi
+USE_GUI=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-gpu)
+            USE_GPU=false
+            echo "GPU option disabled."
+            shift
+            ;;
+        --gui)
+            USE_GUI=true
+            echo "GUI mode enabled."
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 # Validate and configure GPU options
 GPU_OPTION=""
@@ -31,7 +44,7 @@ else
 fi
 
 if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 [--no-gpu] <file_path> <server_ip>"
+    echo "Usage: $0 [--no-gpu] [--gui] <file_path> <server_ip>"
     exit 1
 fi
 
@@ -58,7 +71,12 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -d -it --privileged \
 
 docker cp $1 "$container_name":/home/user/
 
-docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2"
+HEADLESS_ARG="true"
+if [[ "$USE_GUI" == "true" ]]; then
+    HEADLESS_ARG="false"
+fi
+
+docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2 headless:=$HEADLESS_ARG"
 
 docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null
