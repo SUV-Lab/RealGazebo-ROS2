@@ -201,10 +201,10 @@ def launch_setup(context, *args, **kwargs):
 
     # Environments
     model_path_env = SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH',
-                                            f'$GZ_SIM_RESOURCE_PATH:/tmp/models:{gazebo_path}/models:{gazebo_path}/worlds')
+                                            f'$GZ_SIM_RESOURCE_PATH:/tmp/models:{current_package_path}/models:{gazebo_path}/models:{gazebo_path}/worlds')
     
     plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
-                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins")
+                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{current_package_path}/libs:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins")
 
     server_config_env = SetEnvironmentVariable('GZ_SIM_SERVER_CONFIG_PATH',
                                                f"{vehicle_lst[0]['build_target']}/src/modules/simulation/gz_bridge/server.config")
@@ -216,7 +216,7 @@ def launch_setup(context, *args, **kwargs):
 
     gazebo_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([gz_sim_pkg, 'launch', 'gz_sim.launch.py'])),
-        launch_arguments={'gz_args': f'--verbose=1 -r {gazebo_path}/worlds/c-track.sdf'}.items()
+        launch_arguments={'gz_args': f'--verbose=1 -r {current_package_path}/worlds/c-track.sdf'}.items()
     )
 
     uv_process_list = []
