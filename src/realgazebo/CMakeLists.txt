@@ -7,9 +7,29 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+find_package(gz-sim8 REQUIRED)
+find_package(gz-plugin2 REQUIRED)
+find_package(gz-common5 REQUIRED)
+
+# Build RealGazebo plugin
+add_library(RealGazebo SHARED
+  plugins/realgazebo/RealGazebo.cpp
+)
+
+target_include_directories(RealGazebo PRIVATE
+  plugins/realgazebo
+)
+
+target_link_libraries(RealGazebo
+  gz-sim8::gz-sim8
+  gz-plugin2::gz-plugin2
+  gz-common5::gz-common5
+)
+
+# Install plugin
+install(TARGETS RealGazebo
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
@@ -20,6 +40,10 @@ install(DIRECTORY models
 )
 
 install(DIRECTORY worlds
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY plugins
   DESTINATION share/${PROJECT_NAME}
 )
 
