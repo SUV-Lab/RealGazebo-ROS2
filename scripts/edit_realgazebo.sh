@@ -36,6 +36,7 @@ docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null
 
 docker run ${GPU_OPTION} ${GPU_RUNTIME} -it --privileged \
+    -e LOCAL_USER_ID="$(id -u)" \
     -e DISPLAY=$DISPLAY \
     --env="QT_X11_NO_MITSHM=1" \
     ${GPU_ENV} \
