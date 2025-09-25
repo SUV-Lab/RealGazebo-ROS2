@@ -8,7 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 from collections import defaultdict
 
 from ament_index_python import get_package_prefix
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, get_package_prefix
 
 import launch
 from launch import LaunchDescription
@@ -189,6 +189,7 @@ def parse_yaml_to_list(file_path):
 def launch_setup(context, *args, **kwargs):
     # Configuration
     current_package_path = get_package_share_directory('realgazebo')
+    current_package_prefix = get_package_prefix('realgazebo')
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
     vehicle_str = LaunchConfiguration('vehicle').perform(context)
@@ -205,7 +206,7 @@ def launch_setup(context, *args, **kwargs):
                                             f'$GZ_SIM_RESOURCE_PATH:/tmp/models:{gazebo_path}/models:{gazebo_path}/worlds')
     
     plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
-                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins")
+                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins:{current_package_prefix}/lib")
 
     server_config_env = SetEnvironmentVariable('GZ_SIM_SERVER_CONFIG_PATH',
                                                f"{vehicle_lst[0]['build_target']}/src/modules/simulation/gz_bridge/server.config")
