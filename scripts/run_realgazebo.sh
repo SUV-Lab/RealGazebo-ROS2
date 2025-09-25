@@ -94,7 +94,7 @@ if [[ "$USE_GUI" == "true" ]]; then
     HEADLESS_ARG="false"
 fi
 
-docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2 headless:=$HEADLESS_ARG world_type:=$WORLD_TYPE"
+docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2 headless:=$HEADLESS_ARG world:=$WORLD_TYPE"
 
 docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null

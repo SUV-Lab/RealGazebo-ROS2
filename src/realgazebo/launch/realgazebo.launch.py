@@ -112,7 +112,6 @@ def create_px4_command(vehicle, vehicle_type):
     return cmd_args, env_vars
 
 def create_px4_param_command(vehicle, name, value):
-    print(f"Setting PX4 parameter {name} to {value} for vehicle ID {vehicle['id']}")
     px4_param_cmd = [f"{vehicle['build_target']}/build/px4_sitl_default/bin/px4-param", "--instance", str(vehicle['id']), "set", name, str(value)]
 
     return px4_param_cmd
@@ -200,6 +199,7 @@ def launch_setup(context, *args, **kwargs):
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
     vehicle_str = LaunchConfiguration('vehicle').perform(context)
     headless = LaunchConfiguration('headless').perform(context).lower() == 'true'
+    world = LaunchConfiguration('world').perform(context)
     if not validate_yaml(vehicle_str):
         exit(1)
 
@@ -209,7 +209,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Environments
     model_path_env = SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH',
-                                            f'$GZ_SIM_RESOURCE_PATH:/tmp/models:{gazebo_path}/models:{gazebo_path}/worlds')
+                                            f'$GZ_SIM_RESOURCE_PATH:{current_package_path}/models:{gazebo_path}/models:{gazebo_path}/worlds')
     
     plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
                                              f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins:{current_package_prefix}/lib")
@@ -219,14 +219,26 @@ def launch_setup(context, *args, **kwargs):
 
     uxrce_dds_synct_param_env = SetEnvironmentVariable('PX4_PARAM_UXRCE_DDS_SYNCT', '0')
     
+    # generate world file to /tmp/c-track.sdf if needed
+    env = Environment(loader=FileSystemLoader(os.path.join(current_package_path, 'models', 'c-track')))
+    world_model = env.get_template(f'model.sdf.jinja')
+    output_world = world_model.render(world=world)
+    world_model_path = os.path.join(current_package_path, 'models', 'c-track', 'model.sdf')
+    print(world_model_path)
+    with open(world_model_path, 'w') as f:
+        f.write(output_world)
+        print(f'c-track.sdf is generated')
+
     # it sometimes need to set GZ_IP to 127.0.0.1 or not so just use it
     gz_ip_env = SetEnvironmentVariable('GZ_IP', '127.0.0.1')
 
     gz_sim_pkg = get_package_share_directory('ros_gz_sim')
 
+    world_file_path = os.path.join(current_package_path, 'worlds', f'c-track.sdf')
+
     gazebo_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([gz_sim_pkg, 'launch', 'gz_sim.launch.py'])),
-        launch_arguments={'gz_args': f'--verbose=1 -r -s {gazebo_path}/worlds/c-track.sdf' if headless else f'--verbose=1 -r {gazebo_path}/worlds/c-track.sdf'}.items()
+        launch_arguments={'gz_args': f'--verbose=1 -r -s {world_file_path}' if headless else f'--verbose=1 -r {world_file_path}'}.items()
     )
 
     uv_process_list = []
@@ -349,6 +361,15 @@ def generate_launch_description():
             default_value='true',
             description='headless mode of Gazebo',
             choices=['true', 'false']
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'world',
+            default_value='c-track',
+            description='type of world',
+            choices=['c-track', 'urban', 'vils']
         )
     )
 

@@ -2,3 +2,7 @@ build
 install
 log
 __pycache__
+
+# Large STL mesh files (downloaded by CMake)
+c-track.stl
+vils.stl

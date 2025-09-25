@@ -26,6 +26,45 @@ target_link_libraries(RealGazebo
   gz-common5::gz-common5
 )
 
+# Download large STL files if they don't exist
+set(MESH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/c-track/meshes")
+set(C_TRACK_STL "${MESH_DIR}/c-track.stl")
+set(VILS_STL "${MESH_DIR}/vils.stl")
+
+# Download c-track.stl if it doesn't exist
+if(NOT EXISTS ${C_TRACK_STL})
+  message(STATUS "Downloading c-track.stl...")
+  file(DOWNLOAD
+    "https://realgazebo.cbnu.ac.kr/file/c-track.stl"
+    ${C_TRACK_STL}
+    SHOW_PROGRESS
+    STATUS download_status
+  )
+  list(GET download_status 0 status_code)
+  if(NOT status_code EQUAL 0)
+    message(WARNING "Failed to download c-track.stl")
+  endif()
+else()
+  message(STATUS "c-track.stl already exists, skipping download")
+endif()
+
+# Download vils.stl if it doesn't exist
+if(NOT EXISTS ${VILS_STL})
+  message(STATUS "Downloading vils.stl...")
+  file(DOWNLOAD
+    "https://realgazebo.cbnu.ac.kr/file/vils.stl"
+    ${VILS_STL}
+    SHOW_PROGRESS
+    STATUS download_status
+  )
+  list(GET download_status 0 status_code)
+  if(NOT status_code EQUAL 0)
+    message(WARNING "Failed to download vils.stl")
+  endif()
+else()
+  message(STATUS "vils.stl already exists, skipping download")
+endif()
+
 # Install plugin
 install(TARGETS RealGazebo
   DESTINATION lib/${PROJECT_NAME}
@@ -41,6 +80,10 @@ install(DIRECTORY models
 
 install(DIRECTORY plugins
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY worlds
+  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
