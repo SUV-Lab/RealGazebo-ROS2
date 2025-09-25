@@ -24,7 +24,7 @@ vehicles:
   2 :
     type : x500
     build_target : 0
-    spawnpoint : (18.846, -36.317, 0.0, -3.14)
+    spawnpoint : (18.846, -36.317, -0.3, -3.14)
 
   3 :
     type : x500
@@ -34,7 +34,7 @@ vehicles:
   4 :
     type : x500
     build_target : 0
-    spawnpoint : (-24.458, 16.23, 0.3, -3.14)
+    spawnpoint : (-24.458, 16.23, 0.5, -3.14)
 
   5 :
     type : rover_ackermann
