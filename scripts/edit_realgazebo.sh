@@ -1,5 +1,7 @@
 #!/bin/bash
 
+xhost +
+
 # Determine GPU usage
 USE_GPU=true
 if [[ "$1" == "--no-gpu" ]]; then

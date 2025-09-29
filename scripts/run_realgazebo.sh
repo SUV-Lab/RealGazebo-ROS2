@@ -1,5 +1,7 @@
 #!/bin/bash
 
+xhost +
+
 # Determine GPU usage and GUI mode
 USE_GPU=true
 USE_GUI=false
