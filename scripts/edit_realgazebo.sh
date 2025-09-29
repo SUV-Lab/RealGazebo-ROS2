@@ -46,5 +46,5 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -it --privileged \
     -v /dev:/dev:rw \
     --hostname $(hostname) \
     --network host \
-    --name "$container_name" mdeagewt/realgazebo-dev:0.2 bash
+    --name "$container_name" aware4docker/realgazebo:1.0 bash
 

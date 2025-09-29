@@ -45,14 +45,30 @@ else
     fi
 fi
 
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 [--no-gpu] [--gui] <file_path> <server_ip>"
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    echo "Usage: $0 [--no-gpu] [--gui] <file_path> <server_ip> [world_type]"
+    echo "world_type options: default, urban, vils (default: default)"
     exit 1
 fi
 
 if [ ! -f "$1" ]; then
     echo "Error: The specified file does not exist."
     exit 1
+fi
+
+# Set world_type (default: "default")
+WORLD_TYPE="default"
+if [ "$#" -eq 3 ]; then
+    case $3 in
+        default|urban|vils)
+            WORLD_TYPE="$3"
+            echo "Using world type: $WORLD_TYPE"
+            ;;
+        *)
+            echo "Error: Invalid world_type '$3'. Valid options: default, urban, vils"
+            exit 1
+            ;;
+    esac
 fi
 
 container_name="realgazebo"
@@ -69,7 +85,7 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -d -it --privileged \
     -v /dev:/dev:rw \
     --hostname $(hostname) \
     --network host \
-    --name "$container_name" mdeagewt/realgazebo-dev:0.2
+    --name "$container_name" aware4docker/realgazebo:1.0
 
 docker cp $1 "$container_name":/home/user/
 
@@ -78,7 +94,7 @@ if [[ "$USE_GUI" == "true" ]]; then
     HEADLESS_ARG="false"
 fi
 
-docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2 headless:=$HEADLESS_ARG"
+docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2 headless:=$HEADLESS_ARG world_type:=$WORLD_TYPE"
 
 docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null
