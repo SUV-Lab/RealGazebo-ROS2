@@ -1,9 +1,9 @@
 FROM ubuntu:24.04
 LABEL maintainer="kmk <kmk6061602@gmail.com>"
 
-ENV DEBIAN_FRONTEND noninteractive
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 RUN apt-get update && apt-get -y --quiet --no-install-recommends install \
     ant \
@@ -94,12 +94,12 @@ RUN useradd --shell /bin/bash -u 1001 -c "" -m user && usermod -a -G dialout use
 RUN mkdir /tmp/.X11-unix && \
     chmod 1777 /tmp/.X11-unix && \
     chown -R root:root /tmp/.X11-unix
-ENV DISPLAY :99
+ENV DISPLAY=:99
 
-ENV CCACHE_UMASK 000
-ENV PATH "/usr/lib/ccache:$PATH"
-ENV TERM xterm
-ENV TZ UTC
+ENV CCACHE_UMASK=000
+ENV PATH="/usr/lib/ccache:$PATH"
+ENV TERM=xterm
+ENV TZ=UTC
 
 # SITL UDP PORTS
 EXPOSE 14556/udp
@@ -132,7 +132,7 @@ RUN apt-get update && apt-get install -q -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install ROS2 Jazzy
-ENV ROS_DISTRO jazzy
+ENV ROS_DISTRO=jazzy
 
 # setup ros2 keys
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
