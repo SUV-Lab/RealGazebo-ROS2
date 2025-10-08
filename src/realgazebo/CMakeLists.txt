@@ -28,7 +28,7 @@ target_link_libraries(RealGazebo
 
 # Install plugin
 install(TARGETS RealGazebo
-  DESTINATION lib/${PROJECT_NAME}
+  DESTINATION libs/${PROJECT_NAME}
 )
 
 install(DIRECTORY launch
