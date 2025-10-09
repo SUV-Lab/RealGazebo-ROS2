@@ -97,7 +97,7 @@ def create_px4_command(vehicle, vehicle_type):
         'PX4_GZ_STANDALONE': '1',
         'PX4_SYS_AUTOSTART': autostart_id,
         'PX4_UXRCE_DDS_NS' : f"vehicle{vehicle['id'] + 1}",
-        'PX4_GZ_WORLD' : 'c-track'
+        'PX4_GZ_WORLD' : 'c-track',
     }
     
     # PX4 binary path
@@ -192,6 +192,7 @@ def launch_setup(context, *args, **kwargs):
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
     vehicle_str = LaunchConfiguration('vehicle').perform(context)
+    headless = LaunchConfiguration('headless').perform(context).lower() == 'true'
     if not validate_yaml(vehicle_str):
         exit(1)
 
@@ -205,7 +206,7 @@ def launch_setup(context, *args, **kwargs):
     
     plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
                                              f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{current_package_path}/libs:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins")
-
+    
     server_config_env = SetEnvironmentVariable('GZ_SIM_SERVER_CONFIG_PATH',
                                                f"{vehicle_lst[0]['build_target']}/src/modules/simulation/gz_bridge/server.config")
     
@@ -214,13 +215,14 @@ def launch_setup(context, *args, **kwargs):
 
     gz_sim_pkg = get_package_share_directory('ros_gz_sim')
 
+    gz_args_for_headless = '-s --headless-rendering' if headless else ''
+
     gazebo_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([gz_sim_pkg, 'launch', 'gz_sim.launch.py'])),
-        launch_arguments={'gz_args': f'--verbose=1 -r {current_package_path}/worlds/c-track.sdf'}.items()
+        launch_arguments={'gz_args': f'--verbose=1 -r  {gz_args_for_headless} {current_package_path}/worlds/c-track.sdf'}.items()
     )
 
     uv_process_list = []
-    rock_process_list = []
 
     xrce_agent_process = ExecuteProcess(
         cmd=[FindExecutable(name='MicroXRCEAgent'), 'udp4', '-p', '8888'])
@@ -279,7 +281,7 @@ def launch_setup(context, *args, **kwargs):
 
     uv_actions_with_delays = create_timed_actions(
         uv_process_list,
-        initial_delay=30.0,
+        initial_delay=10.0,
         interval=0.5
     )
 
@@ -323,5 +325,13 @@ def generate_launch_description():
             description='port of UE5'
         )
     )
+
+    declared_arguments.append(
+       DeclareLaunchArgument(
+           'headless',
+           default_value='false',
+           description='Run Gazebo in headless mode (true/false). When true, runs server only with headless rendering.'
+       )
+   )
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])
