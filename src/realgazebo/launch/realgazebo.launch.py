@@ -111,6 +111,12 @@ def create_px4_command(vehicle, vehicle_type):
     
     return cmd_args, env_vars
 
+def create_px4_param_command(vehicle, name, value):
+    print(f"Setting PX4 parameter {name} to {value} for vehicle ID {vehicle['id']}")
+    px4_param_cmd = [f"{vehicle['build_target']}/build/px4_sitl_default/bin/px4-param", "--instance", str(vehicle['id']), "set", name, str(value)]
+
+    return px4_param_cmd
+
 def print_usage():
     print("""Usage: ros2 launch realgazebo realgazebo.launch.py server_ip:=[your_server_ip_address] vehicle:=[path to yaml file]""")
 
@@ -270,6 +276,11 @@ def launch_setup(context, *args, **kwargs):
                 additional_env=px4_env,
             )
             uv_process_list.append(px4_process)
+
+    for vehicle in vehicle_lst:
+        px4_param_cmd = create_px4_param_command(vehicle, 'NAV_DLL_ACT', 0)
+        px4_param_process = ExecuteProcess(cmd=px4_param_cmd)
+        uv_process_list.append(px4_param_process)
 
     gz_timesync_node = Node(
         package='ros_gz_bridge',
