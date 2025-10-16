@@ -212,7 +212,7 @@ def launch_setup(context, *args, **kwargs):
                                             f'$GZ_SIM_RESOURCE_PATH:{current_package_path}/models:{gazebo_path}/models:{gazebo_path}/worlds')
     
     plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
-                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins:{current_package_prefix}/lib")
+                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins:{current_package_prefix}/lib/realgazebo")
 
     server_config_env = SetEnvironmentVariable('GZ_SIM_SERVER_CONFIG_PATH',
                                                f"{vehicle_lst[0]['build_target']}/src/modules/simulation/gz_bridge/server.config")

@@ -212,7 +212,6 @@ RUN apt-get update \
 
 USER user
 RUN cd /home/user/realgazebo/RealGazebo-PX4 \
-   && ./Tools/download_ctrack.sh \
    && make px4_sitl \
    && cd /home/user/realgazebo/RealGazebo-ROS2 \
    && . /opt/ros/$ROS_DISTRO/setup.sh \
