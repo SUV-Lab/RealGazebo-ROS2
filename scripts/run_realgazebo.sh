@@ -56,16 +56,16 @@ if [ ! -f "$1" ]; then
     exit 1
 fi
 
-# Set world_type (default: "default")
-WORLD_TYPE="default"
+# Set world_type (default: "c-track")
+WORLD_TYPE="c-track"
 if [ "$#" -eq 3 ]; then
     case $3 in
-        default|urban|vils)
+        c-track|urban|vils)
             WORLD_TYPE="$3"
             echo "Using world type: $WORLD_TYPE"
             ;;
         *)
-            echo "Error: Invalid world_type '$3'. Valid options: default, urban, vils"
+            echo "Error: Invalid world_type '$3'. Valid options: c-track, urban, vils"
             exit 1
             ;;
     esac
@@ -85,7 +85,7 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -d -it --privileged \
     -v /dev:/dev:rw \
     --hostname $(hostname) \
     --network host \
-    --name "$container_name" aware4docker/realgazebo:1.0
+    --name "$container_name" aware4docker/realgazebo:1.1
 
 docker cp $1 "$container_name":/home/user/
 
