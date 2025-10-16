@@ -216,6 +216,8 @@ def launch_setup(context, *args, **kwargs):
 
     server_config_env = SetEnvironmentVariable('GZ_SIM_SERVER_CONFIG_PATH',
                                                f"{vehicle_lst[0]['build_target']}/src/modules/simulation/gz_bridge/server.config")
+
+    uxrce_dds_synct_param_env = SetEnvironmentVariable('PX4_PARAM_UXRCE_DDS_SYNCT', '0')
     
     # it sometimes need to set GZ_IP to 127.0.0.1 or not so just use it
     gz_ip_env = SetEnvironmentVariable('GZ_IP', '127.0.0.1')
@@ -281,6 +283,9 @@ def launch_setup(context, *args, **kwargs):
         px4_param_cmd = create_px4_param_command(vehicle, 'NAV_DLL_ACT', 0)
         px4_param_process = ExecuteProcess(cmd=px4_param_cmd)
         uv_process_list.append(px4_param_process)
+        px4_param_cmd = create_px4_param_command(vehicle, 'COM_RCL_EXCEPT', 31)
+        px4_param_process = ExecuteProcess(cmd=px4_param_cmd)
+        uv_process_list.append(px4_param_process)
 
     gz_timesync_node = Node(
         package='ros_gz_bridge',
@@ -300,6 +305,7 @@ def launch_setup(context, *args, **kwargs):
         model_path_env,
         plugin_path_env,
         server_config_env,
+        uxrce_dds_synct_param_env,
         gz_ip_env,
         xrce_agent_process,
         gazebo_node,
