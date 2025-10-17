@@ -140,8 +140,20 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 	}
 	num_moveable_link_ = idx;
 	
-	gzmsg << "RealGazebo Model Plugin: Loaded for " << vehicle_type_ << "_" << static_cast<int>(vehicle_num_) 
+	gzmsg << "RealGazebo Model Plugin: Loaded for " << vehicle_type_ << "_" << static_cast<int>(vehicle_num_)
 	      << " with " << num_motor_joint_ << " motors and " << num_moveable_link_ << " moveable links." << std::endl;
+
+	// Send initialization message (data_type = 4, no payload)
+	const size_t init_payload_size = sizeof(RealGazeboPacketHeader);
+	std::vector<uint8_t> init_buffer(init_payload_size);
+
+	RealGazeboPacketHeader* init_header = reinterpret_cast<RealGazeboPacketHeader*>(init_buffer.data());
+	init_header->vehicle_num = vehicle_num_;
+	init_header->vehicle_code = getVehicleCode(vehicle_type_);
+	init_header->data_type = 4;
+
+	sendto(sock_unreal_, init_buffer.data(), init_payload_size, 0,
+	       reinterpret_cast<struct sockaddr*>(&addr_unreal_), sizeof(addr_unreal_));
 }
 
 void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
