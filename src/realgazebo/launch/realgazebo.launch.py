@@ -207,15 +207,28 @@ def launch_setup(context, *args, **kwargs):
     gazebo_path = f"{vehicle_lst[0]['build_target']}/Tools/simulation/gz"
     pairs = vehicle_str.split(',')
 
+    # Load YAML to get px4_targets
+    with open(vehicle_str, 'r') as file:
+        data = yaml.safe_load(file)
+    px4_targets = data.get('px4_target', {})
+
     # Environments
     model_path_env = SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH',
                                             f'$GZ_SIM_RESOURCE_PATH:{current_package_path}/models:{gazebo_path}/models:{gazebo_path}/worlds')
-    
-    plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
-                                             f"$GZ_SIM_SYSTEM_PLUGIN_PATH:{vehicle_lst[0]['build_target']}/build/px4_sitl_default/src/modules/simulation/gz_plugins:{current_package_prefix}/lib/realgazebo")
 
+    # Build plugin paths for all px4_targets
+    plugin_paths = [f"$GZ_SIM_SYSTEM_PLUGIN_PATH"]
+    for target_name, target_path in px4_targets.items():
+        plugin_paths.append(f"{target_path}/build/px4_sitl_default/src/modules/simulation/gz_plugins")
+    plugin_paths.append(f"{current_package_prefix}/lib/realgazebo")
+
+    plugin_path_env = SetEnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH',
+                                             ':'.join(plugin_paths))
+
+    # Get first px4_target for server config
+    first_px4_target = list(px4_targets.values())[0]
     server_config_env = SetEnvironmentVariable('GZ_SIM_SERVER_CONFIG_PATH',
-                                               f"{vehicle_lst[0]['build_target']}/src/modules/simulation/gz_bridge/server.config")
+                                               f"{first_px4_target}/src/modules/simulation/gz_bridge/server.config")
 
     uxrce_dds_synct_param_env = SetEnvironmentVariable('PX4_PARAM_UXRCE_DDS_SYNCT', '0')
     
