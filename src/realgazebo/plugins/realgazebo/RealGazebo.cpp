@@ -58,6 +58,8 @@ RealGazebo::RealGazebo() :
 RealGazebo::~RealGazebo()
 {
 	if (sock_unreal_ >= 0) {
+		// Send reset message before closing socket
+		sendResetMessage();
 		close(sock_unreal_);
 	}
 }
@@ -143,17 +145,8 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 	gzmsg << "RealGazebo Model Plugin: Loaded for " << vehicle_type_ << "_" << static_cast<int>(vehicle_num_)
 	      << " with " << num_motor_joint_ << " motors and " << num_moveable_link_ << " moveable links." << std::endl;
 
-	// Send initialization message (data_type = 4, no payload)
-	const size_t init_payload_size = sizeof(RealGazeboPacketHeader);
-	std::vector<uint8_t> init_buffer(init_payload_size);
-
-	RealGazeboPacketHeader* init_header = reinterpret_cast<RealGazeboPacketHeader*>(init_buffer.data());
-	init_header->vehicle_num = vehicle_num_;
-	init_header->vehicle_code = getVehicleCode(vehicle_type_);
-	init_header->data_type = 4;
-
-	sendto(sock_unreal_, init_buffer.data(), init_payload_size, 0,
-	       reinterpret_cast<struct sockaddr*>(&addr_unreal_), sizeof(addr_unreal_));
+	// Send initialization/reset message (data_type = 4)
+	sendResetMessage();
 }
 
 void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
@@ -267,9 +260,28 @@ void RealGazebo::setupSendSocket(int &sock, struct sockaddr_in &addr, int port)
 		gzerr << "Failed to create UDP socket" << std::endl;
 		return;
 	}
-	
+
 	std::memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	inet_pton(AF_INET, unreal_ip_.c_str(), &addr.sin_addr);
+}
+
+void RealGazebo::sendResetMessage()
+{
+	if (sock_unreal_ < 0) {
+		return;
+	}
+
+	// Send reset message (data_type = 4, no payload)
+	const size_t payload_size = sizeof(RealGazeboPacketHeader);
+	std::vector<uint8_t> buffer(payload_size);
+
+	RealGazeboPacketHeader* header = reinterpret_cast<RealGazeboPacketHeader*>(buffer.data());
+	header->vehicle_num = vehicle_num_;
+	header->vehicle_code = getVehicleCode(vehicle_type_);
+	header->data_type = 4;
+
+	sendto(sock_unreal_, buffer.data(), payload_size, 0,
+	       reinterpret_cast<struct sockaddr*>(&addr_unreal_), sizeof(addr_unreal_));
 }

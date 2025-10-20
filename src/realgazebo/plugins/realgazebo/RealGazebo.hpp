@@ -96,8 +96,10 @@ public:
 
 private:
 	uint8_t getVehicleCode(const std::string &vehicle_type) const;
-	
+
 	void setupSendSocket(int &sock, struct sockaddr_in &addr, int port);
+
+	void sendResetMessage();
 	
 	gz::sim::Entity model_entity_;
 	gz::sim::Model model_;
