@@ -250,6 +250,7 @@ uint8_t RealGazebo::getVehicleCode(const std::string &vehicle_type) const
 	else if (vehicle_type == "boat") return 2;
 	else if (vehicle_type == "lc_62") return 3;
 	else if (vehicle_type == "ugv_kimm") return 4;
+	else if (vehicle_type == "rock") return 201;
 	else return 255;
 }
 

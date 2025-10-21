@@ -27,6 +27,7 @@ from launch.actions import (
 from launch.event_handlers import OnProcessStart, OnProcessExit
 
 support_vehicle = ["x500", "rover_ackermann", "lc_62", "boat"]
+support_obstacle = ["rock"]
 without_px4 = []
 
 # Vehicle type to autostart ID mapping (will be populated dynamically)
@@ -139,19 +140,20 @@ def validate_yaml(file_path):
     # Validate build_target reference and vehicle type
     px4_target_paths = data.get('px4_target', {})
     for key, vehicle in vehicles.items():
-        build_target = vehicle.get('build_target')
-        if build_target not in px4_target_paths:
-            print(f"Error: Vehicle {key} has an invalid build_target ({build_target}). It is not defined in px4_target.")
-            return False
+        if vehicle.get('type') not in support_obstacle:
+            build_target = vehicle.get('build_target')
+            if build_target not in px4_target_paths:
+                print(f"Error: Vehicle {key} has an invalid build_target ({build_target}). It is not defined in px4_target.")
+                return False
 
-        # Validate vehicle type has corresponding airframe file
-        vehicle_type = vehicle.get('type')
-        build_target_path = px4_target_paths[build_target]
-        try:
-            get_autostart_id(vehicle_type, build_target_path)
-        except ValueError as e:
-            print(f"Error: Vehicle {key} validation failed: {e}")
-            return False
+            # Validate vehicle type has corresponding airframe file
+            vehicle_type = vehicle.get('type')
+            build_target_path = px4_target_paths[build_target]
+            try:
+                get_autostart_id(vehicle_type, build_target_path)
+            except ValueError as e:
+                print(f"Error: Vehicle {key} validation failed: {e}")
+                return False
 
         # Validate spawnpoint format
         try:
@@ -170,6 +172,7 @@ def parse_yaml_to_list(file_path):
     px4_targets = data.get('px4_target', {})
 
     vehicles_list = []
+    obstacle_list = []
 
     vehicles = data.get('vehicles', {})
     for key in sorted(vehicles.keys()):
@@ -180,16 +183,25 @@ def parse_yaml_to_list(file_path):
         build_target_path = px4_targets.get(build_target_key)
         spawnpoint = ast.literal_eval(vehicle.get('spawnpoint'))
 
-        vehicle_dict = {
-            'id': key,
-            'type': entity_type,
-            'build_target': build_target_path,
-            'spawnpoint': spawnpoint
-        }
+        if entity_type in support_obstacle:
+            obstacle_dict = {
+                'id': key,
+                'type': entity_type,
+                'spawnpoint': spawnpoint
+            }
+            obstacle_list.append(obstacle_dict)
+        
+        else:
+            vehicle_dict = {
+                'id': key,
+                'type': entity_type,
+                'build_target': build_target_path,
+                'spawnpoint': spawnpoint
+            }
 
-        vehicles_list.append(vehicle_dict)
+            vehicles_list.append(vehicle_dict)
 
-    return vehicles_list
+    return vehicles_list, obstacle_list
 
 def launch_setup(context, *args, **kwargs):
     # Configuration
@@ -203,7 +215,7 @@ def launch_setup(context, *args, **kwargs):
     if not validate_yaml(vehicle_str):
         exit(1)
 
-    vehicle_lst = parse_yaml_to_list(vehicle_str)
+    vehicle_lst, obstacle_lst = parse_yaml_to_list(vehicle_str)
     gazebo_path = f"{vehicle_lst[0]['build_target']}/Tools/simulation/gz"
     pairs = vehicle_str.split(',')
 
@@ -255,20 +267,19 @@ def launch_setup(context, *args, **kwargs):
     )
 
     uv_process_list = []
-    rock_process_list = []
+    obstacle_process_list = []
 
     xrce_agent_process = ExecuteProcess(
         cmd=[FindExecutable(name='MicroXRCEAgent'), 'udp4', '-p', '8888'])
 
     model_save_dir = os.path.join('/tmp', 'models')
     os.makedirs(model_save_dir, exist_ok=True)    
-    model_list = support_vehicle + without_px4
-    print(model_list)
+    model_list = support_vehicle + support_obstacle + without_px4
 
     for model_type in model_list:
         ## generate sdf file to /tmp/{model_type}.sdf
         env = Environment(loader=FileSystemLoader(os.path.join(current_package_path, 'models')))
-        model = env.get_template(f'{model_type}.sdf.jinja')
+        model = env.get_template(f'{model_type}.sdf.jinja' if model_type not in support_obstacle else f'{model_type}/{model_type}.sdf.jinja')
         output_model = model.render(unreal_ip=unreal_ip, unreal_port=unreal_port)
         model_file_path = os.path.join(model_save_dir, f'{model_type}.sdf')
         with open(model_file_path, 'w') as f:
@@ -303,7 +314,27 @@ def launch_setup(context, *args, **kwargs):
                 additional_env=px4_env,
             )
             uv_process_list.append(px4_process)
+    
+    for obstacle in obstacle_lst:
+        obstacle_type = obstacle['type']
+        spawn_entity = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([os.path.join(gz_sim_pkg, 'launch', 'gz_spawn_model.launch.py')])),
+            launch_arguments={
+                'world': 'c-track',
+                'file': f'/tmp/models/{obstacle_type}.sdf',
+                'entity_name': f'{obstacle_type}_{obstacle["id"]}',
+                'x': f'{float(obstacle["spawnpoint"][0])}',
+                'y': f'{float(obstacle["spawnpoint"][1])}',
+                'z': f'{float(obstacle["spawnpoint"][2])}',
+                'R': '0.0',
+                'P': '0.0',
+                'Y': f'{float(obstacle["spawnpoint"][3])}'
+            }.items()
+        )
+        obstacle_process_list.append(spawn_entity)
 
+
+    # parameter must be change after all vehicles and obstacles are spawned
     for vehicle in vehicle_lst:
         px4_param_cmd = create_px4_param_command(vehicle, 'NAV_DLL_ACT', 0)
         px4_param_process = ExecuteProcess(cmd=px4_param_cmd)
@@ -326,6 +357,12 @@ def launch_setup(context, *args, **kwargs):
         interval=0.5
     )
 
+    obstacle_actions_with_delays = create_timed_actions(
+        obstacle_process_list,
+        initial_delay=10.0,
+        interval=0.5
+    )
+
     nodes_to_start = [
         model_path_env,
         plugin_path_env,
@@ -335,6 +372,7 @@ def launch_setup(context, *args, **kwargs):
         xrce_agent_process,
         gazebo_node,
         *uv_actions_with_delays,
+        *obstacle_actions_with_delays,
         gz_timesync_node
     ]
 

@@ -1,0 +1,128 @@
+# example.yaml
+
+px4_target:
+# - A mapping of build targets identified by unique numeric keys.
+# - 0 must be a RealGazebo-PX4 build target.
+  0 : /home/user/realgazebo/RealGazebo-PX4
+  # 1: /path/to/your/other/PX4-Autopilot
+
+vehicles:
+# - Each entity is identified by a unique numeric key (e.g., 0, 1, 2, 3).
+#  - 'type': Specifies the type of the entity.
+#  - 'build_target': References the PX4 target defined above, determining which PX4-Autopilot build to use.
+#  - 'spawnpoint' : Defines the spawn location in a 3D space using coordinates and a yaw value (in radians) (x, y, z, yaw).
+  0 :
+    type : rover_ackermann # urban rover 1
+    build_target : 0
+    spawnpoint : (-304.81, 117.83, 13.84, 0)
+
+  1 :
+    type : rover_ackermann # beltway rover 1
+    build_target : 0
+    spawnpoint : (18.846, 14.751, -1.3, -3.14)
+
+  2 :
+    type : x500 # drone 1
+    build_target : 0
+    spawnpoint : (18.846, -36.317, -0.3, -3.14)
+
+  3 :
+    type : lc_62 # high uav 1
+    build_target : 0
+    spawnpoint : (-24.458, -12.013, 0.3, -3.14)
+
+  4 :
+    type : rover_ackermann
+    build_target : 0
+    spawnpoint : (-301.81, 120.83, 13.84, 0)
+
+  5 :
+    type : rover_ackermann
+    build_target : 0
+    spawnpoint : (-304.81, 120.83, 13.84, 0)
+
+  6 :
+    type : rover_ackermann
+    build_target : 0
+    spawnpoint : (-301.81, 117.83, 13.84, 0)
+
+## obstacles
+  7 :
+    type : rock
+    spawnpoint : (-247.60, 113.52, 13.17, 0.5)
+
+  8 :
+    type : rock
+    spawnpoint : (-251.64, 114.04, 13.17, -0.8)
+
+  9 :
+    type : rock
+    spawnpoint : (-257.86, 111.79, 13.37, 1.2)
+
+  10 :
+    type : rock
+    spawnpoint : (-264.51, 109.87, 13.37, -1.5)
+
+  11 :
+    type : rock
+    spawnpoint : (-277.37, 109.13, 13.57, 2.1)
+
+  12 :
+    type : rock
+    spawnpoint : (-286.57, 107.73, 13.57, -2.3)
+
+  13 :
+    type : rock
+    spawnpoint : (-294.76, 107.93, 13.77, 0.9)
+
+  14 :
+    type : rock
+    spawnpoint : (-301.46, 111.13, 13.77, -1.1)
+
+  15 :
+    type : rock
+    spawnpoint : (-303.16, 125.73, 14.17, 1.8)
+
+  16 :
+    type : rock
+    spawnpoint : (-309.96, 143.23, 14.17, -0.4)
+
+  17 :
+    type : rock
+    spawnpoint : (-321.66, 148.13, 14.37, 2.5)
+
+  18 :
+    type : rock
+    spawnpoint : (-347.06, 144.53, 14.90, -2.7)
+
+  19 :
+    type : rock
+    spawnpoint : (-363.56, 148.13, 14.77, 0.7)
+
+  20 :
+    type : rock
+    spawnpoint : (-365.13, 166.32, 14.77, -1.9)
+
+  21 :
+    type : rock
+    spawnpoint : (-368.05, 174.86, 14.77, 1.4)
+
+  22 :
+    type : rock
+    spawnpoint : (-367.80, 183.89, 14.77, -0.6)
+
+  23 :
+    type : rock
+    spawnpoint : (-370.73, 192.43, 14.77, 2.8)
+
+  24 :
+    type : rock
+    spawnpoint : (-370.48, 201.45, 14.77, -2.0)
+
+  25 :
+    type : rock
+    spawnpoint : (-373.40, 210.00, 14.88, 1.0)
+
+  26 :
+    type : rock
+    spawnpoint : (-371.26, 187.83, 14.77, -1.3)
