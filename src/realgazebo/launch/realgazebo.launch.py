@@ -342,6 +342,9 @@ def launch_setup(context, *args, **kwargs):
         px4_param_cmd = create_px4_param_command(vehicle, 'COM_RCL_EXCEPT', 31)
         px4_param_process = ExecuteProcess(cmd=px4_param_cmd)
         uv_process_list.append(px4_param_process)
+        px4_param_cmd = create_px4_param_command(vehicle, 'COM_RC_IN_MODE', 4)
+        px4_param_process = ExecuteProcess(cmd=px4_param_cmd)
+        uv_process_list.append(px4_param_process)
 
     gz_timesync_node = Node(
         package='ros_gz_bridge',
