@@ -19,12 +19,12 @@
     <static>false</static>
     <link name="rock">
       <collision name="collision">
-        <pose>0 0 0 0 0 0</pose>
+        <pose>0 0 0.2 0 0 0</pose>
         <geometry>
-          <mesh>
-            <uri>model://rock/meshes/rock_s.dae </uri>
-            <scale>1.0 1.0 1.0</scale>
-          </mesh>
+          <cylinder>
+            <radius>0.42</radius>
+            <length>0.4</length>
+          </cylinder>
         </geometry>
       </collision>
 
