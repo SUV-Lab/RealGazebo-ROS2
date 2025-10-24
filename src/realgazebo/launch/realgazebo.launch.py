@@ -249,7 +249,6 @@ def launch_setup(context, *args, **kwargs):
     world_model = env.get_template(f'model.sdf.jinja')
     output_world = world_model.render(world=world)
     world_model_path = os.path.join(current_package_path, 'models', 'c-track', 'model.sdf')
-    print(world_model_path)
     with open(world_model_path, 'w') as f:
         f.write(output_world)
         print(f'c-track.sdf is generated')

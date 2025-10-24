@@ -10,6 +10,8 @@ find_package(ament_cmake REQUIRED)
 find_package(gz-sim8 REQUIRED)
 find_package(gz-plugin2 REQUIRED)
 find_package(gz-common5 REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
 
 # Build RealGazebo plugin
 add_library(RealGazebo SHARED
@@ -24,6 +26,26 @@ target_link_libraries(RealGazebo
   gz-sim8::gz-sim8
   gz-plugin2::gz-plugin2
   gz-common5::gz-common5
+)
+
+# Build MotorFailureROS2 plugin
+add_library(MotorFailureROS2 SHARED
+  plugins/motor_failure_ros2/MotorFailureSystem.cpp
+)
+
+target_include_directories(MotorFailureROS2 PRIVATE
+  plugins/motor_failure_ros2
+)
+
+target_link_libraries(MotorFailureROS2
+  gz-sim8::gz-sim8
+  gz-plugin2::gz-plugin2
+  gz-common5::gz-common5
+)
+
+ament_target_dependencies(MotorFailureROS2
+  rclcpp
+  std_msgs
 )
 
 # Download large STL files if they don't exist
@@ -65,8 +87,8 @@ else()
   message(STATUS "vils.stl already exists, skipping download")
 endif()
 
-# Install plugin
-install(TARGETS RealGazebo
+# Install plugins
+install(TARGETS RealGazebo MotorFailureROS2
   DESTINATION lib/${PROJECT_NAME}
 )
 
