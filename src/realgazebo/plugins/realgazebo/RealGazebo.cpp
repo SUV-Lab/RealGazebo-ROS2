@@ -62,6 +62,29 @@ RealGazebo::~RealGazebo()
 		sendResetMessage();
 		close(sock_unreal_);
 	}
+
+	// Clean up ROS2 resources safely
+	if (ros_node_) {
+		try {
+			// Reset subscriptions first
+			if (battery_status_sub_) {
+				battery_status_sub_.reset();
+			}
+			if (vehicle_status_sub_) {
+				vehicle_status_sub_.reset();
+			}
+
+			// Then reset the node
+			ros_node_.reset();
+
+			gzdbg << "[RealGazebo] Cleaned up ROS2 resources" << std::endl;
+
+		} catch (const std::exception &e) {
+			// Ignore exceptions during shutdown - ROS2 may have already shut down
+			gzdbg << "[RealGazebo] Exception during cleanup (expected if ROS2 already shutdown): "
+			      << e.what() << std::endl;
+		}
+	}
 }
 
 void RealGazebo::Configure(const gz::sim::Entity &_entity,
@@ -145,6 +168,43 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 	gzmsg << "RealGazebo Model Plugin: Loaded for " << vehicle_type_ << "_" << static_cast<int>(vehicle_num_)
 	      << " with " << num_motor_joint_ << " motors and " << num_moveable_link_ << " moveable links." << std::endl;
 
+	// Initialize ROS2, if it has not already been initialized
+	if (!rclcpp::ok()) {
+		int argc = 0;
+		char **argv = nullptr;
+		rclcpp::init(argc, argv);
+	}
+
+	// Create ROS2 node
+	std::string model_name_str = vehicle_type_ + "_" + std::to_string(static_cast<int>(vehicle_num_));
+	ros_node_ = rclcpp::Node::make_shared("realgazebo_" + model_name_str);
+
+	// Get ROS2 topic names for subscriptions
+	std::string vehicle_namespace = "/vehicle" + std::to_string(static_cast<int>(vehicle_num_) + 1);
+
+	if (_sdf->HasElement("BatteryStatusTopic")) {
+		battery_status_topic_ = _sdf->Get<std::string>("BatteryStatusTopic");
+	} else {
+		battery_status_topic_ = vehicle_namespace + "/fmu/out/battery_status";
+	}
+
+	if (_sdf->HasElement("VehicleStatusTopic")) {
+		vehicle_status_topic_ = _sdf->Get<std::string>("VehicleStatusTopic");
+	} else {
+		vehicle_status_topic_ = vehicle_namespace + "/fmu/out/vehicle_status_v1";
+	}
+
+	// Create ROS2 subscriptions with sensor_data QoS
+	auto qos = rclcpp::SensorDataQoS();
+
+	battery_status_sub_ = ros_node_->create_subscription<px4_msgs::msg::BatteryStatus>(
+		battery_status_topic_, qos,
+		std::bind(&RealGazebo::BatteryStatusCallback, this, std::placeholders::_1));
+
+	vehicle_status_sub_ = ros_node_->create_subscription<px4_msgs::msg::VehicleStatus>(
+		vehicle_status_topic_, qos,
+		std::bind(&RealGazebo::VehicleStatusCallback, this, std::placeholders::_1));
+
 	// Send initialization/reset message (data_type = 4)
 	sendResetMessage();
 }
@@ -152,6 +212,11 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 				       const gz::sim::EntityComponentManager &_ecm)
 {
+	// Spin ROS2 to process callbacks
+	if (ros_node_ && rclcpp::ok()) {
+		rclcpp::spin_some(ros_node_);
+	}
+
 	if (counter_ % 10 == 0) {
 		auto world_pose_comp = _ecm.Component<gz::sim::components::WorldPose>(model_entity_);
 		gz::math::Pose3d world_pose;
@@ -238,8 +303,38 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 			sendto(sock_unreal_, moveable_buffer.data(), moveable_payload_size, 0,
 			       reinterpret_cast<struct sockaddr*>(&addr_unreal_), sizeof(addr_unreal_));
 		}
+
+		// 5. Additional data (battery remaining + nav_state)
+		{
+			float battery_remaining = 0.0f;
+			uint8_t nav_state = 0;
+
+			{
+				std::lock_guard<std::mutex> lock(battery_status_mutex_);
+				battery_remaining = battery_status_.remaining;
+			}
+
+			{
+				std::lock_guard<std::mutex> lock(vehicle_status_mutex_);
+				nav_state = vehicle_status_.nav_state;
+			}
+
+			const size_t additional_payload_size = sizeof(RealGazeboPacketHeader) + sizeof(float) + sizeof(uint8_t);
+			std::vector<uint8_t> additional_buffer(additional_payload_size);
+
+			RealGazeboPacketHeader* additional_header = reinterpret_cast<RealGazeboPacketHeader*>(additional_buffer.data());
+			additional_header->vehicle_num = vehicle_num_;
+			additional_header->vehicle_code = getVehicleCode(vehicle_type_);
+			additional_header->data_type = 5;
+
+			std::memcpy(additional_buffer.data() + sizeof(RealGazeboPacketHeader), &battery_remaining, sizeof(float));
+			std::memcpy(additional_buffer.data() + sizeof(RealGazeboPacketHeader) + sizeof(float), &nav_state, sizeof(uint8_t));
+
+			sendto(sock_unreal_, additional_buffer.data(), additional_payload_size, 0,
+			       reinterpret_cast<struct sockaddr*>(&addr_unreal_), sizeof(addr_unreal_));
+		}
 	}
-	
+
 	counter_++;
 }
 
@@ -285,4 +380,16 @@ void RealGazebo::sendResetMessage()
 
 	sendto(sock_unreal_, buffer.data(), payload_size, 0,
 	       reinterpret_cast<struct sockaddr*>(&addr_unreal_), sizeof(addr_unreal_));
+}
+
+void RealGazebo::BatteryStatusCallback(const px4_msgs::msg::BatteryStatus::SharedPtr msg)
+{
+	std::lock_guard<std::mutex> lock(battery_status_mutex_);
+	battery_status_ = *msg;
+}
+
+void RealGazebo::VehicleStatusCallback(const px4_msgs::msg::VehicleStatus::SharedPtr msg)
+{
+	std::lock_guard<std::mutex> lock(vehicle_status_mutex_);
+	vehicle_status_ = *msg;
 }

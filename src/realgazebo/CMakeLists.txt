@@ -12,6 +12,7 @@ find_package(gz-plugin2 REQUIRED)
 find_package(gz-common5 REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(px4_msgs REQUIRED)
 
 # Build RealGazebo plugin
 add_library(RealGazebo SHARED
@@ -26,6 +27,11 @@ target_link_libraries(RealGazebo
   gz-sim8::gz-sim8
   gz-plugin2::gz-plugin2
   gz-common5::gz-common5
+)
+
+ament_target_dependencies(RealGazebo
+  rclcpp
+  px4_msgs
 )
 
 # Build MotorFailureROS2 plugin

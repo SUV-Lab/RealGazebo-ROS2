@@ -57,12 +57,18 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <mutex>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
+
+// ROS2 includes
+#include <rclcpp/rclcpp.hpp>
+#include <px4_msgs/msg/battery_status.hpp>
+#include <px4_msgs/msg/vehicle_status.hpp>
 
 #pragma pack(push, 1)
 struct RealGazeboPacketHeader {
@@ -95,6 +101,12 @@ public:
 			const gz::sim::EntityComponentManager &_ecm) override;
 
 private:
+	/// \brief Callback for ROS2 BatteryStatus subscription
+	void BatteryStatusCallback(const px4_msgs::msg::BatteryStatus::SharedPtr msg);
+
+	/// \brief Callback for ROS2 VehicleStatus subscription
+	void VehicleStatusCallback(const px4_msgs::msg::VehicleStatus::SharedPtr msg);
+
 	uint8_t getVehicleCode(const std::string &vehicle_type) const;
 
 	void setupSendSocket(int &sock, struct sockaddr_in &addr, int port);
@@ -117,7 +129,32 @@ private:
 	std::vector<gz::sim::Entity> moveable_links_;
 	int num_motor_joint_;
 	int num_moveable_link_;
-	
+
 	uint64_t counter_;
+
+	/// \brief ROS2 node for communication
+	rclcpp::Node::SharedPtr ros_node_;
+
+	/// \brief ROS2 subscription for BatteryStatus
+	rclcpp::Subscription<px4_msgs::msg::BatteryStatus>::SharedPtr battery_status_sub_;
+
+	/// \brief ROS2 subscription for VehicleStatus
+	rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr vehicle_status_sub_;
+
+	/// \brief Latest BatteryStatus message
+	px4_msgs::msg::BatteryStatus battery_status_;
+
+	/// \brief Latest VehicleStatus message
+	px4_msgs::msg::VehicleStatus vehicle_status_;
+
+	/// \brief Mutex to protect battery_status_
+	std::mutex battery_status_mutex_;
+
+	/// \brief Mutex to protect vehicle_status_
+	std::mutex vehicle_status_mutex_;
+
+	/// \brief ROS2 topic names
+	std::string battery_status_topic_;
+	std::string vehicle_status_topic_;
 };
 } // end namespace custom
