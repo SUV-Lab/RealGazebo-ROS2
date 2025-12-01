@@ -54,44 +54,102 @@ ament_target_dependencies(MotorFailureROS2
   std_msgs
 )
 
+# Get git version tag
+execute_process(
+  COMMAND git describe --tags --always
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  OUTPUT_VARIABLE GIT_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+
+# Parse to get clean tag (v1.0-5-g1183749 -> v1.0)
+string(REGEX REPLACE "-[0-9]+-g[0-9a-f]+$" "" MODEL_VERSION "${GIT_VERSION}")
+
+if(NOT MODEL_VERSION)
+  set(MODEL_VERSION "latest")
+  message(WARNING "Could not determine git version, using: ${MODEL_VERSION}")
+else()
+  message(STATUS "Using model version: ${MODEL_VERSION}")
+endif()
+
 # Download large STL files if they don't exist
 set(MESH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/c-track/meshes")
 set(C_TRACK_STL "${MESH_DIR}/c-track.stl")
 set(VILS_STL "${MESH_DIR}/vils.stl")
+set(URBAN_STL "${MESH_DIR}/urban.stl")
+set(BASE_URL "https://realgazebo.cbnu.ac.kr/download/${MODEL_VERSION}")
 
-# Download c-track.stl if it doesn't exist
-if(NOT EXISTS ${C_TRACK_STL})
-  message(STATUS "Downloading c-track.stl...")
-  file(DOWNLOAD
-    "https://realgazebo.cbnu.ac.kr/file/c-track.stl"
-    ${C_TRACK_STL}
-    SHOW_PROGRESS
-    STATUS download_status
-  )
-  list(GET download_status 0 status_code)
-  if(NOT status_code EQUAL 0)
-    message(WARNING "Failed to download c-track.stl")
-  endif()
-else()
-  message(STATUS "c-track.stl already exists, skipping download")
-endif()
+# Function to download file with MD5 verification
+function(download_with_verification filename)
+  set(FILE_PATH "${MESH_DIR}/${filename}")
+  set(MD5_FILE "${CMAKE_CURRENT_BINARY_DIR}/${filename}.md5")  # Use build dir for temp files
+  set(FILE_URL "${BASE_URL}/${filename}")
+  set(MD5_URL "${BASE_URL}/${filename}.md5")
 
-# Download vils.stl if it doesn't exist
-if(NOT EXISTS ${VILS_STL})
-  message(STATUS "Downloading vils.stl...")
+  # Download MD5 checksum file to temporary location
   file(DOWNLOAD
-    "https://realgazebo.cbnu.ac.kr/file/vils.stl"
-    ${VILS_STL}
-    SHOW_PROGRESS
-    STATUS download_status
+    ${MD5_URL}
+    ${MD5_FILE}
+    STATUS md5_status
   )
-  list(GET download_status 0 status_code)
-  if(NOT status_code EQUAL 0)
-    message(WARNING "Failed to download vils.stl")
+
+  list(GET md5_status 0 md5_code)
+  if(NOT md5_code EQUAL 0)
+    message(WARNING "Failed to download ${filename}.md5 from ${BASE_URL}")
+    return()
   endif()
-else()
-  message(STATUS "vils.stl already exists, skipping download")
-endif()
+
+  # Check if we need to download
+  set(NEED_DOWNLOAD FALSE)
+  if(NOT EXISTS ${FILE_PATH})
+    message(STATUS "${filename} not found, downloading...")
+    set(NEED_DOWNLOAD TRUE)
+  else()
+    # Compare checksums
+    file(MD5 ${FILE_PATH} LOCAL_MD5)
+    file(READ ${MD5_FILE} SERVER_MD5)
+    string(STRIP "${SERVER_MD5}" SERVER_MD5)
+    # Extract only the hash part (in case md5sum format includes filename)
+    string(REGEX REPLACE "^([a-f0-9]+).*" "\\1" SERVER_MD5 "${SERVER_MD5}")
+
+    if(NOT "${LOCAL_MD5}" STREQUAL "${SERVER_MD5}")
+      message(STATUS "${filename} checksum mismatch (local: ${LOCAL_MD5}, server: ${SERVER_MD5})")
+      message(STATUS "Re-downloading ${filename}...")
+      set(NEED_DOWNLOAD TRUE)
+    else()
+      message(STATUS "${filename} checksum verified, skipping download")
+    endif()
+  endif()
+
+  # Download file if needed
+  if(NEED_DOWNLOAD)
+    file(DOWNLOAD
+      ${FILE_URL}
+      ${FILE_PATH}
+      SHOW_PROGRESS
+      STATUS download_status
+    )
+    list(GET download_status 0 status_code)
+    if(NOT status_code EQUAL 0)
+      message(WARNING "Failed to download ${filename} from ${BASE_URL}")
+    else()
+      message(STATUS "${filename} downloaded successfully")
+    endif()
+  endif()
+
+  # Clean up temporary MD5 file
+  file(REMOVE ${MD5_FILE})
+endfunction()
+
+# Download c-track.stl with verification
+download_with_verification("c-track.stl")
+
+# Download vils.stl with verification
+download_with_verification("vils.stl")
+
+# Download urban.stl with verification
+download_with_verification("urban.stl")
 
 # Install plugins
 install(TARGETS RealGazebo MotorFailureROS2
