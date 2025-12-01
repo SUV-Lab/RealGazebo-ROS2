@@ -54,10 +54,10 @@ vehicles:
   8 :
     type : boat
     build_target : 0
-    spawnpoint : (-281.27, -225.26, 8.5, -1.57)
+    spawnpoint : (-281.27, -235.26, 8.5, -1.57)
 
   9 :
     type : boat
     build_target : 0
-    spawnpoint : (-265.74, -215.94, 8.5, -1.57)
+    spawnpoint : (-265.74, -235.26, 8.5, -1.57)
     
