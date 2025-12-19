@@ -211,6 +211,7 @@ def launch_setup(context, *args, **kwargs):
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
     vehicle_str = LaunchConfiguration('vehicle').perform(context)
     headless = LaunchConfiguration('headless').perform(context).lower() == 'true'
+    verbose = LaunchConfiguration('verbose').perform(context).lower() == 'true'
     world = LaunchConfiguration('world').perform(context)
     if not validate_yaml(vehicle_str):
         exit(1)
@@ -260,9 +261,10 @@ def launch_setup(context, *args, **kwargs):
 
     world_file_path = os.path.join(current_package_path, 'worlds', f'c-track.sdf')
 
+    verbose_level = 4 if verbose else 1
     gazebo_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([gz_sim_pkg, 'launch', 'gz_sim.launch.py'])),
-        launch_arguments={'gz_args': f'--verbose=1 -r -s {world_file_path}' if headless else f'--verbose=1 -r {world_file_path}'}.items()
+        launch_arguments={'gz_args': f'--verbose={verbose_level} -r -s {world_file_path}' if headless else f'--verbose={verbose_level} -r {world_file_path}'}.items()
     )
 
     uv_process_list = []
@@ -413,6 +415,15 @@ def generate_launch_description():
             'headless',
             default_value='true',
             description='headless mode of Gazebo',
+            choices=['true', 'false']
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'verbose',
+            default_value='false',
+            description='Run Gazebo with verbose logging (level 4)',
             choices=['true', 'false']
         )
     )

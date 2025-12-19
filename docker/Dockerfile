@@ -58,6 +58,7 @@ RUN apt-get update && apt-get -y --quiet --no-install-recommends install \
     zip \
     sudo \
     xterm \
+    socat \
     && apt-get -y autoremove \
     && apt-get clean autoclean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

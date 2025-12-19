@@ -1,0 +1,102 @@
+# RealGazebo Multi-Container Setup
+#
+# Usage:
+#   1. Generate vehicle configuration: python3 scripts/generate_compose.py config/vehicles.yaml
+#   2. Start simulation: docker-compose up -d
+#   3. Stop simulation: docker-compose down
+#
+# Or use the helper scripts:
+#   ./scripts/start_simulation.sh config/vehicles.yaml [--gui] [--no-gpu]
+#   ./scripts/stop_simulation.sh
+
+networks:
+  gazebo-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+  vehicle-network:
+    driver: bridge
+    internal: true  # 외부 접근 차단, 드론간 통신만
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+x-common-env: &common-env
+  DISPLAY: ${DISPLAY:-:0}
+  QT_X11_NO_MITSHM: 1
+
+x-common-volumes: &common-volumes
+  - /tmp/.X11-unix:/tmp/.X11-unix
+  - ${PX4_PATH:-/home/user/realgazebo/RealGazebo-PX4}:/home/user/realgazebo/RealGazebo-PX4:ro
+
+x-gpu-env: &gpu-env
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: all
+
+services:
+  # Gazebo Simulator Container
+  gazebo:
+    image: aware4docker/realgazebo:1.2
+    container_name: gazebo
+    hostname: gazebo
+    privileged: true
+    runtime: nvidia
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: 1
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+      GZ_IP: 172.20.0.2
+      GZ_PARTITION: realgazebo
+      LOCAL_USER_ID: ${LOCAL_USER_ID:-1000}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev:/dev
+    networks:
+      gazebo-network:
+        ipv4_address: 172.20.0.2
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "su -s /bin/bash user -c 'source /opt/ros/jazzy/setup.bash && timeout 5 gz topic -e -t /world/c-track/clock -n 1' > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    command: bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo gazebo.launch.py headless:=${HEADLESS:-true} verbose:=${VERBOSE:-false} world:=${WORLD:-c-track} px4_path:=/home/user/realgazebo/RealGazebo-PX4 unreal_ip:=${UNREAL_IP:-host.docker.internal} unreal_port:=${UNREAL_PORT:-5005}"
+    deploy:
+      resources:
+        limits:
+          memory: 64G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Vehicle Template - Extended by generated vehicle services
+  # This service is not started directly, only used as a template
+  vehicle_template:
+    image: aware4docker/realgazebo:1.2
+    profiles:
+      - template  # Never started directly
+    privileged: true
+    environment:
+      <<: *common-env
+      PX4_GZ_STANDALONE: 1
+      LOCAL_USER_ID: ${LOCAL_USER_ID:-1000}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${PX4_PATH:-/home/user/realgazebo/RealGazebo-PX4}:/home/user/realgazebo/RealGazebo-PX4:ro
+      - gazebo-models:/tmp/models
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      gazebo:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+

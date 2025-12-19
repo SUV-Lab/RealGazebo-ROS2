@@ -360,7 +360,20 @@ void RealGazebo::setupSendSocket(int &sock, struct sockaddr_in &addr, int port)
 	std::memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
-	inet_pton(AF_INET, unreal_ip_.c_str(), &addr.sin_addr);
+
+	// Use getaddrinfo to support both IP addresses and hostnames
+	struct addrinfo hints{}, *res;
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+
+	if (getaddrinfo(unreal_ip_.c_str(), nullptr, &hints, &res) == 0 && res != nullptr) {
+		addr.sin_addr = reinterpret_cast<struct sockaddr_in*>(res->ai_addr)->sin_addr;
+		gzmsg << "RealGazebo: Resolved " << unreal_ip_ << " to "
+		      << inet_ntoa(addr.sin_addr) << ":" << port << std::endl;
+		freeaddrinfo(res);
+	} else {
+		gzerr << "RealGazebo: Failed to resolve hostname: " << unreal_ip_ << std::endl;
+	}
 }
 
 void RealGazebo::sendResetMessage()
