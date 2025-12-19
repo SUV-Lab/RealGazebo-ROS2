@@ -80,24 +80,22 @@ set(VILS_STL "${MESH_DIR}/vils.stl")
 set(URBAN_STL "${MESH_DIR}/urban.stl")
 set(BASE_URL "https://realgazebo.cbnu.ac.kr/download/${MODEL_VERSION}")
 
-# Function to download file with MD5 verification
+# Function to download file with MD5 verification (using curl with retry)
 function(download_with_verification filename)
   set(FILE_PATH "${MESH_DIR}/${filename}")
-  set(MD5_FILE "${CMAKE_CURRENT_BINARY_DIR}/${filename}.md5")  # Use build dir for temp files
+  set(MD5_FILE "${CMAKE_CURRENT_BINARY_DIR}/${filename}.md5")
   set(FILE_URL "${BASE_URL}/${filename}")
   set(MD5_URL "${BASE_URL}/${filename}.md5")
 
-  # Download MD5 checksum file to temporary location
-  file(DOWNLOAD
-    ${MD5_URL}
-    ${MD5_FILE}
-    STATUS md5_status
+  # Download MD5 checksum file using curl with retry
+  execute_process(
+    COMMAND curl -fsSL --retry 5 --retry-delay 3 --retry-max-time 60 -o ${MD5_FILE} ${MD5_URL}
+    RESULT_VARIABLE md5_code
+    ERROR_QUIET
   )
 
-  list(GET md5_status 0 md5_code)
   if(NOT md5_code EQUAL 0)
-    message(WARNING "Failed to download ${filename}.md5 from ${BASE_URL}")
-    return()
+    message(FATAL_ERROR "Failed to download ${filename}.md5 from ${BASE_URL}")
   endif()
 
   # Check if we need to download
@@ -110,7 +108,6 @@ function(download_with_verification filename)
     file(MD5 ${FILE_PATH} LOCAL_MD5)
     file(READ ${MD5_FILE} SERVER_MD5)
     string(STRIP "${SERVER_MD5}" SERVER_MD5)
-    # Extract only the hash part (in case md5sum format includes filename)
     string(REGEX REPLACE "^([a-f0-9]+).*" "\\1" SERVER_MD5 "${SERVER_MD5}")
 
     if(NOT "${LOCAL_MD5}" STREQUAL "${SERVER_MD5}")
@@ -122,17 +119,16 @@ function(download_with_verification filename)
     endif()
   endif()
 
-  # Download file if needed
+  # Download file if needed using curl with retry
   if(NEED_DOWNLOAD)
-    file(DOWNLOAD
-      ${FILE_URL}
-      ${FILE_PATH}
-      SHOW_PROGRESS
-      STATUS download_status
+    message(STATUS "Downloading ${filename} (with retry)...")
+    execute_process(
+      COMMAND curl -fSL --retry 5 --retry-delay 5 --retry-max-time 300
+                   --connect-timeout 30 -o ${FILE_PATH} ${FILE_URL}
+      RESULT_VARIABLE status_code
     )
-    list(GET download_status 0 status_code)
     if(NOT status_code EQUAL 0)
-      message(WARNING "Failed to download ${filename} from ${BASE_URL}")
+      message(FATAL_ERROR "Failed to download ${filename} from ${BASE_URL}")
     else()
       message(STATUS "${filename} downloaded successfully")
     endif()
