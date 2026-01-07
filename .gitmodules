@@ -2,3 +2,6 @@
 	path = src/px4_msgs
 	url = https://github.com/PX4/px4_msgs.git
 	branch = release/1.16
+[submodule "src/network_sim"]
+	path = src/network_sim
+	url = https://github.com/Porofly/network_sim.git
