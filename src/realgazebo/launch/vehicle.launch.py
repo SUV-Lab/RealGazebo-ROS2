@@ -136,7 +136,7 @@ def launch_setup(context, *args, **kwargs):
             </interfaceWhiteList>
         </transport_descriptor>
     </transport_descriptors>
-    <participant profile_name="px4_participant">
+    <participant profile_name="px4_participant" is_default_profile="true">
         <rtps>
             <useBuiltinTransports>false</useBuiltinTransports>
             <userTransports>
