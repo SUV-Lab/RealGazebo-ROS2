@@ -238,6 +238,25 @@ def launch_setup(context, *args, **kwargs):
         )
         timed_actions.append(control_node)
 
+    # 7. Network Simulator (V2V + TC Controller integrated with intra-process communication)
+    network_sim_node = Node(
+        package='network_sim',
+        executable='network_sim_node',
+        namespace=f'network_sim_{instance_id}',
+        parameters=[{
+            'reference_vehicle_id': instance_id + 1,
+            # TC controller parameters
+            'instance_id': instance_id,
+            'network_interface': 'eth1',
+            'enable_on_startup': True,
+            'max_latency_ms': 1000.0,
+            'max_jitter_ms': 500.0,
+            'max_packet_loss_rate': 0.99,
+        }],
+        output='screen'
+    )
+    timed_actions.append(network_sim_node)
+
     # Apply timing: spawn at T+10s, then 5s interval for subsequent actions
     # Increased delays to ensure gz-transport discovery completes before PX4 subscribes
     timed_action_nodes = create_timed_actions(
