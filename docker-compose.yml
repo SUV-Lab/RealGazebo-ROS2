@@ -6,8 +6,8 @@
 #   3. Stop simulation: docker-compose down
 #
 # Or use the helper scripts:
-#   ./scripts/start_simulation.sh config/vehicles.yaml [--gui] [--no-gpu]
-#   ./scripts/stop_simulation.sh
+#   ./scripts/start_compose_simulation.sh config/vehicles.yaml [--gui] [--no-gpu]
+#   ./scripts/stop_compose_simulation.sh
 
 networks:
   gazebo-network:

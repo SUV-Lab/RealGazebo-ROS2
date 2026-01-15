@@ -2,16 +2,16 @@
 """
 Generate docker-compose.override.yml from existing RealGazebo YAML configuration.
 
-################################################################################
-#  DO NOT RUN THIS SCRIPT DIRECTLY!                                            #
-#  Use start_simulation.sh instead:                                            #
-#                                                                              #
-#    ./scripts/start_simulation.sh src/realgazebo/yaml/example.yaml            #
-#    ./scripts/start_simulation.sh src/realgazebo/yaml/example.yaml --gui      #
-#                                                                              #
-################################################################################
+########################################################################################
+#  DO NOT RUN THIS SCRIPT DIRECTLY!                                                    #
+#  Use start_compose_simulation.sh instead:                                            #
+#                                                                                      #
+#    ./scripts/start_compose_simulation.sh src/realgazebo/yaml/example.yaml            #
+#    ./scripts/start_compose_simulation.sh src/realgazebo/yaml/example.yaml --gui      #
+#                                                                                      #
+########################################################################################
 
-This script is called internally by start_simulation.sh.
+This script is called internally by start_compose_simulation.sh.
 It reads the existing vehicle YAML format (same as realgazebo.launch.py)
 and generates docker-compose.override.yml with vehicle services and networks.
 """

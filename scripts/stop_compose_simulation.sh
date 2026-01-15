@@ -3,7 +3,7 @@
 # Stop RealGazebo Multi-Container Simulation
 #
 # Usage:
-#   ./stop_simulation.sh [options]
+#   ./stop_compose_simulation.sh [options]
 #
 # Options:
 #   --volumes, -v   Also remove volumes (clears generated models)

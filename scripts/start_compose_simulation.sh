@@ -3,7 +3,7 @@
 # Start RealGazebo Multi-Container Simulation
 #
 # Usage:
-#   ./start_simulation.sh [config_file] [options]
+#   ./start_compose_simulation.sh [config_file] [options]
 #
 # Options:
 #   --gui           Enable Gazebo GUI (default: headless)
@@ -14,10 +14,10 @@
 #   --follow        Follow logs after starting
 #
 # Examples:
-#   ./start_simulation.sh                                              # Use default (example.yaml)
-#   ./start_simulation.sh src/realgazebo/yaml/example.yaml             # Use specific config
-#   ./start_simulation.sh --gui                                        # With Gazebo GUI
-#   ./start_simulation.sh src/realgazebo/yaml/multi.yaml --gui         # Custom config with GUI
+#   ./start_compose_simulation.sh                                              # Use default (example.yaml)
+#   ./start_compose_simulation.sh src/realgazebo/yaml/example.yaml             # Use specific config
+#   ./start_compose_simulation.sh --gui                                        # With Gazebo GUI
+#   ./start_compose_simulation.sh src/realgazebo/yaml/multi.yaml --gui         # Custom config with GUI
 #
 
 set -e
@@ -182,7 +182,7 @@ echo "  docker compose logs -f           # View all logs"
 echo "  docker compose logs -f gazebo    # View Gazebo logs"
 echo "  docker compose logs -f vehicle_0 # View vehicle_0 logs"
 echo "  docker compose ps                # List containers"
-echo "  ./scripts/stop_simulation.sh     # Stop simulation"
+echo "  ./scripts/stop_compose_simulation.sh     # Stop simulation"
 echo ""
 
 if [[ "$FOLLOW_LOGS" == "true" ]]; then
