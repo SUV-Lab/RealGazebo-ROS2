@@ -3,7 +3,7 @@
 # Start RealGazebo Multi-Container Simulation
 #
 # Usage:
-#   ./start_compose_simulation.sh [config_file] [options]
+#   ./start_compose_simulation.sh [options] <config_file> [unreal_ip] [world_type]
 #
 # Options:
 #   --gui           Enable Gazebo GUI (default: headless)
@@ -11,13 +11,15 @@
 #   --no-gpu        Disable GPU acceleration
 #   --unreal-ip IP  Unreal Engine server IP (default: host.docker.internal)
 #   --unreal-port P Unreal Engine server port (default: 5005)
+#   --world TYPE    World type: c-track, urban, vils (default: c-track)
 #   --follow        Follow logs after starting
 #
 # Examples:
-#   ./start_compose_simulation.sh                                              # Use default (example.yaml)
-#   ./start_compose_simulation.sh src/realgazebo/yaml/example.yaml             # Use specific config
-#   ./start_compose_simulation.sh --gui                                        # With Gazebo GUI
-#   ./start_compose_simulation.sh src/realgazebo/yaml/multi.yaml --gui         # Custom config with GUI
+#   ./start_compose_simulation.sh config.yaml                                  # Config only (required)
+#   ./start_compose_simulation.sh config.yaml 10.255.70.74                     # Config + IP
+#   ./start_compose_simulation.sh config.yaml 10.255.70.74 urban               # Config + IP + world
+#   ./start_compose_simulation.sh --gui config.yaml                            # Options before config
+#   ./start_compose_simulation.sh --unreal-ip 10.0.0.1 --world urban config.yaml
 #
 
 set -e
@@ -26,12 +28,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Default values
-CONFIG_FILE="${PROJECT_DIR}/src/realgazebo/yaml/example.yaml"
+CONFIG_FILE=""
 HEADLESS=true
 VERBOSE=false
 USE_GPU=true
 UNREAL_IP="host.docker.internal"
+UNREAL_IP_SET=false
 UNREAL_PORT="5005"
+WORLD_TYPE="c-track"
+WORLD_TYPE_SET=false
 FOLLOW_LOGS=false
 
 # Parse arguments
@@ -54,12 +59,27 @@ while [[ $# -gt 0 ]]; do
             ;;
         --unreal-ip)
             UNREAL_IP="$2"
+            UNREAL_IP_SET=true
             echo "Unreal IP: $UNREAL_IP"
             shift 2
             ;;
         --unreal-port)
             UNREAL_PORT="$2"
             echo "Unreal Port: $UNREAL_PORT"
+            shift 2
+            ;;
+        --world)
+            case $2 in
+                c-track|urban|vils)
+                    WORLD_TYPE="$2"
+                    WORLD_TYPE_SET=true
+                    echo "World type: $WORLD_TYPE"
+                    ;;
+                *)
+                    echo "Error: Invalid world type '$2'. Valid options: c-track, urban, vils"
+                    exit 1
+                    ;;
+            esac
             shift 2
             ;;
         --follow|-f)
@@ -71,12 +91,36 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            if [[ -f "$1" ]]; then
-                CONFIG_FILE="$1"
-            elif [[ -f "${PROJECT_DIR}/$1" ]]; then
-                CONFIG_FILE="${PROJECT_DIR}/$1"
+            if [[ -z "$CONFIG_FILE" ]]; then
+                # First positional arg: config file
+                if [[ -f "$1" ]]; then
+                    CONFIG_FILE="$1"
+                elif [[ -f "${PROJECT_DIR}/$1" ]]; then
+                    CONFIG_FILE="${PROJECT_DIR}/$1"
+                else
+                    echo "Error: Config file not found: $1"
+                    exit 1
+                fi
+            elif [[ "$UNREAL_IP_SET" == "false" ]]; then
+                # Second positional arg: unreal IP
+                UNREAL_IP="$1"
+                UNREAL_IP_SET=true
+                echo "Unreal IP: $UNREAL_IP"
+            elif [[ "$WORLD_TYPE_SET" == "false" ]]; then
+                # Third positional arg: world type
+                case $1 in
+                    c-track|urban|vils)
+                        WORLD_TYPE="$1"
+                        WORLD_TYPE_SET=true
+                        echo "World type: $WORLD_TYPE"
+                        ;;
+                    *)
+                        echo "Error: Invalid world type '$1'. Valid options: c-track, urban, vils"
+                        exit 1
+                        ;;
+                esac
             else
-                echo "Error: Unknown option or file not found: $1"
+                echo "Error: Unknown argument: $1"
                 exit 1
             fi
             shift
@@ -84,10 +128,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate config file
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Error: Config file not found: $CONFIG_FILE"
+# Validate config file (required)
+if [[ -z "$CONFIG_FILE" ]]; then
+    echo "Error: Config file is required"
+    echo "Usage: $0 [options] <config_file> [unreal_ip] [world_type]"
     exit 1
+fi
+
+# Convert localhost to Docker-compatible host
+if [[ "$UNREAL_IP" == "127.0.0.1" ]] || [[ "$UNREAL_IP" == "localhost" ]]; then
+    echo "Note: Converting $UNREAL_IP → host.docker.internal (Docker compatibility)"
+    UNREAL_IP="host.docker.internal"
 fi
 
 echo "Using config: $CONFIG_FILE"
@@ -99,7 +150,8 @@ xhost + 2>/dev/null || true
 echo "Generating docker-compose configuration..."
 python3 "${SCRIPT_DIR}/generate_compose.py" "$CONFIG_FILE" \
     --unreal-ip "$UNREAL_IP" \
-    --unreal-port "$UNREAL_PORT"
+    --unreal-port "$UNREAL_PORT" \
+    --world "$WORLD_TYPE"
 
 # Set environment variables
 export LOCAL_USER_ID=$(id -u)
@@ -108,6 +160,7 @@ export HEADLESS=$HEADLESS
 export VERBOSE=$VERBOSE
 export UNREAL_IP=$UNREAL_IP
 export UNREAL_PORT=$UNREAL_PORT
+export WORLD=$WORLD_TYPE
 
 # Get Docker host gateway IP for MAVLink GCS connection
 DOCKER_HOST_IP=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null)

@@ -2,9 +2,16 @@
 
 xhost +
 
-# Determine GPU usage and GUI mode
+# Default values
 USE_GPU=true
 USE_GUI=false
+CONFIG_FILE=""
+UNREAL_IP="127.0.0.1"
+UNREAL_IP_SET=false
+WORLD_TYPE="c-track"
+WORLD_TYPE_SET=false
+
+# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --no-gpu)
@@ -17,8 +24,68 @@ while [[ $# -gt 0 ]]; do
             echo "GUI mode enabled."
             shift
             ;;
+        --unreal-ip)
+            UNREAL_IP="$2"
+            UNREAL_IP_SET=true
+            echo "Unreal IP: $UNREAL_IP"
+            shift 2
+            ;;
+        --world)
+            case $2 in
+                c-track|urban|vils)
+                    WORLD_TYPE="$2"
+                    WORLD_TYPE_SET=true
+                    echo "World type: $WORLD_TYPE"
+                    ;;
+                *)
+                    echo "Error: Invalid world type '$2'. Valid options: c-track, urban, vils"
+                    exit 1
+                    ;;
+            esac
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [options] <config_file> [unreal_ip] [world_type]"
+            echo ""
+            echo "Options:"
+            echo "  --no-gpu          Disable GPU acceleration"
+            echo "  --gui             Enable Gazebo GUI (default: headless)"
+            echo "  --unreal-ip IP    Unreal Engine server IP (default: 127.0.0.1)"
+            echo "  --world TYPE      World type: c-track, urban, vils (default: c-track)"
+            exit 0
+            ;;
         *)
-            break
+            if [[ -z "$CONFIG_FILE" ]]; then
+                # First positional arg: config file
+                if [[ -f "$1" ]]; then
+                    CONFIG_FILE="$1"
+                else
+                    echo "Error: Config file not found: $1"
+                    exit 1
+                fi
+            elif [[ "$UNREAL_IP_SET" == "false" ]]; then
+                # Second positional arg: unreal IP
+                UNREAL_IP="$1"
+                UNREAL_IP_SET=true
+                echo "Unreal IP: $UNREAL_IP"
+            elif [[ "$WORLD_TYPE_SET" == "false" ]]; then
+                # Third positional arg: world type
+                case $1 in
+                    c-track|urban|vils)
+                        WORLD_TYPE="$1"
+                        WORLD_TYPE_SET=true
+                        echo "World type: $WORLD_TYPE"
+                        ;;
+                    *)
+                        echo "Error: Invalid world type '$1'. Valid options: c-track, urban, vils"
+                        exit 1
+                        ;;
+                esac
+            else
+                echo "Error: Unknown argument: $1"
+                exit 1
+            fi
+            shift
             ;;
     esac
 done
@@ -45,30 +112,11 @@ else
     fi
 fi
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "Usage: $0 [--no-gpu] [--gui] <file_path> <server_ip> [world_type]"
-    echo "world_type options: default, urban, vils (default: default)"
+# Validate required arguments
+if [[ -z "$CONFIG_FILE" ]]; then
+    echo "Error: Config file is required"
+    echo "Usage: $0 [options] <config_file> [unreal_ip] [world_type]"
     exit 1
-fi
-
-if [ ! -f "$1" ]; then
-    echo "Error: The specified file does not exist."
-    exit 1
-fi
-
-# Set world_type (default: "c-track")
-WORLD_TYPE="c-track"
-if [ "$#" -eq 3 ]; then
-    case $3 in
-        c-track|urban|vils)
-            WORLD_TYPE="$3"
-            echo "Using world type: $WORLD_TYPE"
-            ;;
-        *)
-            echo "Error: Invalid world_type '$3'. Valid options: c-track, urban, vils"
-            exit 1
-            ;;
-    esac
 fi
 
 container_name="realgazebo"
@@ -87,14 +135,14 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -d -it --privileged \
     --network host \
     --name "$container_name" aware4docker/realgazebo:1.1
 
-docker cp $1 "$container_name":/home/user/
+docker cp "$CONFIG_FILE" "$container_name":/home/user/
 
 HEADLESS_ARG="true"
 if [[ "$USE_GUI" == "true" ]]; then
     HEADLESS_ARG="false"
 fi
 
-docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$1") unreal_ip:=$2 headless:=$HEADLESS_ARG world:=$WORLD_TYPE"
+docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$CONFIG_FILE") unreal_ip:=$UNREAL_IP headless:=$HEADLESS_ARG world:=$WORLD_TYPE"
 
 docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null
