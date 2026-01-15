@@ -22,6 +22,7 @@ RUN apt-get update && apt-get -y --quiet --no-install-recommends install \
     git \
     gnupg \
     gosu \
+    iproute2 \
     lcov \
     libelf-dev \
     libexpat-dev \
