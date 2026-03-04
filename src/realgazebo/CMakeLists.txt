@@ -11,8 +11,12 @@ find_package(gz-sim8 REQUIRED)
 find_package(gz-plugin2 REQUIRED)
 find_package(gz-common5 REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(cv_bridge REQUIRED)
 
 # Build RealGazebo plugin
 add_library(RealGazebo SHARED
@@ -147,8 +151,27 @@ download_with_verification("vils.stl")
 # Download urban.stl with verification
 download_with_verification("urban.stl")
 
-# Install plugins
-install(TARGETS RealGazebo MotorFailureROS2
+# Build image_receiver_node
+add_executable(image_receiver_node
+  nodes/image_receiver/ImageReceiver.cpp
+)
+
+target_include_directories(image_receiver_node PRIVATE
+  nodes/image_receiver
+)
+
+ament_target_dependencies(image_receiver_node
+  rclcpp
+  rclcpp_lifecycle
+  sensor_msgs
+  cv_bridge
+)
+
+target_link_libraries(image_receiver_node
+  ${OpenCV_LIBS}
+)
+
+install(TARGETS RealGazebo MotorFailureROS2 image_receiver_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

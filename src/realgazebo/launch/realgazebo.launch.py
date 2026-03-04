@@ -30,6 +30,13 @@ support_vehicle = ["x500", "rover_ackermann", "lc_62", "boat"]
 support_obstacle = ["rock"]
 without_px4 = []
 
+VEHICLE_CAMERAS = {
+    'x500': ['front', 'bottom'],
+    'lc_62': ['front', 'bottom'],
+    'rover_ackermann': ['front', 'top'],
+    'boat': ['front', 'top'],
+}
+
 # Vehicle type to autostart ID mapping (will be populated dynamically)
 
 def create_timed_actions(actions_list, initial_delay, interval):
@@ -209,6 +216,7 @@ def launch_setup(context, *args, **kwargs):
     current_package_prefix = get_package_prefix('realgazebo')
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
+    rtsp_port = LaunchConfiguration('rtsp_port').perform(context)
     vehicle_str = LaunchConfiguration('vehicle').perform(context)
     headless = LaunchConfiguration('headless').perform(context).lower() == 'true'
     verbose = LaunchConfiguration('verbose').perform(context).lower() == 'true'
@@ -309,12 +317,29 @@ def launch_setup(context, *args, **kwargs):
         # Create PX4 process with proper autostart ID
         if vehicle_type not in without_px4:
             px4_cmd, px4_env = create_px4_command(vehicle, vehicle_type)
-            
+
             px4_process = ExecuteProcess(
                 cmd=px4_cmd,
                 additional_env=px4_env,
             )
             uv_process_list.append(px4_process)
+
+        # Create image_receiver nodes (one per camera)
+        cameras = VEHICLE_CAMERAS.get(vehicle_type, ['front'])
+        for camera_type in cameras:
+            receiver_node = Node(
+                package='realgazebo',
+                executable='image_receiver_node',
+                name=f'image_receiver_{vehicle_type}_{vehicle["id"]}_{camera_type}',
+                parameters=[{
+                    'vehicle_type': vehicle_type,
+                    'vehicle_num': vehicle['id'],
+                    'unreal_ip': unreal_ip,
+                    'rtsp_port': int(rtsp_port),
+                    'camera_type': camera_type,
+                }]
+            )
+            uv_process_list.append(receiver_node)
     
     for obstacle in obstacle_lst:
         obstacle_type = obstacle['type']
@@ -407,6 +432,14 @@ def generate_launch_description():
             'unreal_port',
             default_value='5005',
             description='port of UE5'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'rtsp_port',
+            default_value='8554',
+            description='RTSP port for UE5 camera streams'
         )
     )
 

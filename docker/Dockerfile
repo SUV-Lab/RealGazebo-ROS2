@@ -76,7 +76,7 @@ RUN cd /usr/src/gtest \
 
 # Python 3 dependencies installed by pip
 RUN python3 -m pip install --break-system-packages argparse argcomplete coverage cerberus empy==3.3.4 jinja2 kconfiglib \
-    matplotlib>=3.0.* numpy nunavut>=1.1.0 packaging pkgconfig pyros-genmsg pyulog \
+    matplotlib>=3.0.* numpy nunavut>=1.1.0 opencv-python packaging pkgconfig pyros-genmsg pyulog \
     pyyaml requests serial six toml psutil pyulog wheel jsonschema pynacl lxml
 
 # manual ccache setup
@@ -209,6 +209,13 @@ RUN apt-get update \
     && apt-get install --quiet --no-install-recommends -y \
     ros-$ROS_DISTRO-ros-gz \
     ros-$ROS_DISTRO-ros-gz-sim \
+    ros-$ROS_DISTRO-cv-bridge \
+    libopencv-dev \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-libav \
     && apt-get -y autoremove \
     && apt-get clean autoclean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
