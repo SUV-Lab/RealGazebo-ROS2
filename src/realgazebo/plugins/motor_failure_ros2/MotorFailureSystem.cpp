@@ -36,6 +36,7 @@
 
 #include "MotorFailureSystem.hpp"
 
+#include <algorithm>
 #include <gz/plugin/Register.hh>
 #include <gz/sim/components/JointVelocityCmd.hh>
 #include <gz/sim/components/Name.hh>
@@ -98,13 +99,13 @@ void MotorFailureROS2System::Configure(const gz::sim::Entity &_entity,
 	// Get model name to use as namespace
 	std::string model_name = this->model_.Name(_ecm);
 
-	// Get ROS2 topic name for motor failure number subscription
+	// Get ROS2 topic name for motor failure ratios subscription
 	if (_sdf->HasElement("MotorFailureTopic")) {
 		this->ros_topic_ = _sdf->Get<std::string>("MotorFailureTopic");
 
 	} else {
 		// Use model name for topic naming
-		this->ros_topic_ = "/" + model_name + "/motor_failure/motor_number";
+		this->ros_topic_ = "/" + model_name + "/motor_failure/ratios";
 	}
 
 	// Initialize ROS2, if it has not already been initialized
@@ -118,9 +119,9 @@ void MotorFailureROS2System::Configure(const gz::sim::Entity &_entity,
 	this->ros_node_ = rclcpp::Node::make_shared("motor_failure");
 
 	// Create ROS2 subscription
-	this->motor_failure_sub_ = this->ros_node_->create_subscription<std_msgs::msg::Int32>(
+	this->motor_failure_sub_ = this->ros_node_->create_subscription<std_msgs::msg::Float32MultiArray>(
 					   this->ros_topic_, 10,
-					   std::bind(&MotorFailureROS2System::MotorFailureNumberCallback, this, std::placeholders::_1));
+					   std::bind(&MotorFailureROS2System::MotorFailureRatiosCallback, this, std::placeholders::_1));
 
 	gzmsg << "[MotorFailureROS2System] Subscribed to ROS2 topic: " << this->ros_topic_ << std::endl;
 	gzmsg << "[MotorFailureROS2System] Initialized for model: " << model_name << std::endl;
@@ -192,38 +193,63 @@ void MotorFailureROS2System::FindMotorJoints(gz::sim::EntityComponentManager &_e
 //////////////////////////////////////////////////
 void MotorFailureROS2System::ApplyMotorFailure(gz::sim::EntityComponentManager &_ecm)
 {
-	int32_t current_failure;
+	std::vector<float> current_ratios;
 	{
 		std::lock_guard<std::mutex> lock(this->motor_failure_mutex_);
-		current_failure = this->motor_failure_number_;
+		current_ratios = this->motor_failure_ratios_;
 	}
 
 	// Check if failure status changed
-	if (current_failure != this->prev_motor_failure_number_) {
-		if (current_failure > 0) {
-			gzerr << "[MotorFailureROS2System] Motor " << current_failure << " failed!" << std::endl;
+	if (current_ratios != this->prev_motor_failure_ratios_) {
+		for (size_t i = 0; i < current_ratios.size(); ++i) {
+			float ratio = current_ratios[i];
+			float prev = (i < this->prev_motor_failure_ratios_.size()) ? this->prev_motor_failure_ratios_[i] : 0.0f;
 
-		} else if (current_failure == 0 && this->prev_motor_failure_number_ > 0) {
-			gzerr << "[MotorFailureROS2System] Motor " << this->prev_motor_failure_number_
-			      << " recovered!" << std::endl;
+			if (ratio != prev) {
+				if (ratio >= 1.0f) {
+					gzerr << "[MotorFailureROS2System] Motor " << i << " completely failed!" << std::endl;
+
+				} else if (ratio > 0.0f) {
+					gzerr << "[MotorFailureROS2System] Motor " << i << " degraded to "
+					      << (1.0f - ratio) * 100.0f << "% output" << std::endl;
+
+				} else {
+					gzerr << "[MotorFailureROS2System] Motor " << i << " recovered!" << std::endl;
+				}
+			}
 		}
 
-		this->prev_motor_failure_number_ = current_failure;
+		// Check motors that were in the old list but not in the new (implicitly recovered)
+		for (size_t i = current_ratios.size(); i < this->prev_motor_failure_ratios_.size(); ++i) {
+			if (this->prev_motor_failure_ratios_[i] > 0.0f) {
+				gzerr << "[MotorFailureROS2System] Motor " << i << " recovered!" << std::endl;
+			}
+		}
+
+		this->prev_motor_failure_ratios_ = current_ratios;
 	}
 
-	// Apply motor failure if active (1-indexed from ROS2, convert to 0-indexed)
-	if (current_failure > 0 && current_failure <= static_cast<int32_t>(this->motor_joints_.size())) {
-		int motorIdx = current_failure - 1;
-		Entity jointEntity = this->motor_joints_[motorIdx];
+	// Apply per-motor failure ratios
+	for (size_t i = 0; i < this->motor_joints_.size(); ++i) {
+		float ratio = (i < current_ratios.size()) ? current_ratios[i] : 0.0f;
+		ratio = std::clamp(ratio, 0.0f, 1.0f);
 
-		if (jointEntity != kNullEntity) {
-			// Force joint velocity command to 0
-			// This is done in PreUpdate to override MulticopterMotorModel's commands
-			auto jointVelCmd = _ecm.Component<components::JointVelocityCmd>(jointEntity);
+		if (ratio <= 0.0f) {
+			continue;
+		}
 
-			if (jointVelCmd) {
-				*jointVelCmd = components::JointVelocityCmd({0.0});
-			}
+		Entity jointEntity = this->motor_joints_[i];
+
+		if (jointEntity == kNullEntity) {
+			continue;
+		}
+
+		auto jointVelCmd = _ecm.Component<components::JointVelocityCmd>(jointEntity);
+
+		if (jointVelCmd) {
+			double current = jointVelCmd->Data()[0];
+			double degraded = current * (1.0 - static_cast<double>(ratio));
+			*jointVelCmd = components::JointVelocityCmd({degraded});
 		}
 	}
 }
@@ -253,12 +279,12 @@ void MotorFailureROS2System::PreUpdate(const gz::sim::UpdateInfo &_info,
 }
 
 //////////////////////////////////////////////////
-void MotorFailureROS2System::MotorFailureNumberCallback(const std_msgs::msg::Int32::SharedPtr _msg)
+void MotorFailureROS2System::MotorFailureRatiosCallback(const std_msgs::msg::Float32MultiArray::SharedPtr _msg)
 {
 	std::lock_guard<std::mutex> lock(this->motor_failure_mutex_);
-	this->motor_failure_number_ = _msg->data;
-	gzdbg << "[MotorFailureROS2System] Received motor failure number: "
-	      << this->motor_failure_number_ << std::endl;
+	this->motor_failure_ratios_ = _msg->data;
+	gzdbg << "[MotorFailureROS2System] Received motor failure ratios, size: "
+	      << this->motor_failure_ratios_.size() << std::endl;
 }
 
 // Register the plugin

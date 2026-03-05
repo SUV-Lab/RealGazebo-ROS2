@@ -50,7 +50,7 @@
 
 // ROS2 includes
 #include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/int32.hpp>
+#include <std_msgs/msg/float32_multi_array.hpp>
 
 namespace custom
 {
@@ -81,8 +81,8 @@ public:
 		       gz::sim::EntityComponentManager &_ecm) override;
 
 private:
-	/// \brief Callback for ROS2 motor failure number subscription
-	void MotorFailureNumberCallback(const std_msgs::msg::Int32::SharedPtr _msg);
+	/// \brief Callback for ROS2 motor failure ratios subscription
+	void MotorFailureRatiosCallback(const std_msgs::msg::Float32MultiArray::SharedPtr _msg);
 
 	/// \brief Find all motor joints in the model
 	void FindMotorJoints(gz::sim::EntityComponentManager &_ecm);
@@ -93,8 +93,8 @@ private:
 	/// \brief ROS2 node for communication
 	rclcpp::Node::SharedPtr ros_node_;
 
-	/// \brief ROS2 subscription for motor failure number
-	rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr motor_failure_sub_;
+	/// \brief ROS2 subscription for motor failure ratios
+	rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr motor_failure_sub_;
 
 	/// \brief Model entity
 	gz::sim::Entity model_entity_;
@@ -105,15 +105,15 @@ private:
 	/// \brief Vector of motor joint entities (indexed by motor number)
 	std::vector<gz::sim::Entity> motor_joints_;
 
-	/// \brief Current motor failure number (-1 or 0 means no failure, 1-indexed motor number)
-	int32_t motor_failure_number_{-1};
+	/// \brief Current motor failure ratios (0.0=normal, 1.0=complete failure)
+	std::vector<float> motor_failure_ratios_;
 
-	/// \brief Previous motor failure number to detect changes
-	int32_t prev_motor_failure_number_{-1};
+	/// \brief Previous motor failure ratios to detect changes
+	std::vector<float> prev_motor_failure_ratios_;
 
 	/// \brief ROS2 topic name for subscribing to motor failure commands
-	/// Defaults to /<model_name>/motor_failure/motor_number if not specified in SDF
-	std::string ros_topic_{"/motor_failure/motor_number"};
+	/// Defaults to /<model_name>/motor_failure/ratios if not specified in SDF
+	std::string ros_topic_{"/motor_failure/ratios"};
 
 	/// \brief Mutex to protect motor_failure_number_
 	std::mutex motor_failure_mutex_;
