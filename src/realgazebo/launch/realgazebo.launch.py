@@ -26,6 +26,7 @@ from launch.actions import (
     SetEnvironmentVariable,
 )
 from launch.event_handlers import OnProcessStart, OnProcessExit
+from launch.actions import RegisterEventHandler
 
 support_vehicle = ["x500", "x500_lidar_2d", "rover_ackermann", "lc_62", "boat"]
 support_obstacle = ["rock"]
@@ -457,16 +458,35 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'config_file': combined_cfg_path}]
     )
 
+    # Wait for Gazebo to publish /clock before spawning vehicles/obstacles.
+    # 'gz topic -e -t /clock' blocks until the first clock message arrives,
+    # so exiting cleanly means Gazebo is fully up.
+    gz_ready_check = ExecuteProcess(
+        cmd=['bash', '-c', 'gz topic -e -t /clock 2>/dev/null | head -1'],
+        output='screen',
+        name='gz_ready_check',
+    )
+
     uv_actions_with_delays = create_timed_actions(
         uv_process_list,
-        initial_delay=30.0,
+        initial_delay=0.5,
         interval=0.5
     )
 
     obstacle_actions_with_delays = create_timed_actions(
         obstacle_process_list,
-        initial_delay=10.0,
+        initial_delay=0.5,
         interval=0.5
+    )
+
+    spawn_on_ready = RegisterEventHandler(
+        OnProcessExit(
+            target_action=gz_ready_check,
+            on_exit=[
+                *uv_actions_with_delays,
+                *obstacle_actions_with_delays,
+            ]
+        )
     )
 
     nodes_to_start = [
@@ -477,8 +497,8 @@ def launch_setup(context, *args, **kwargs):
         gz_ip_env,
         xrce_agent_process,
         gazebo_node,
-        *uv_actions_with_delays,
-        *obstacle_actions_with_delays,
+        gz_ready_check,
+        spawn_on_ready,
         gz_bridge_node
     ]
 
