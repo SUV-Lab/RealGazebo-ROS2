@@ -340,7 +340,7 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 
 uint8_t RealGazebo::getVehicleCode(const std::string &vehicle_type) const
 {
-	if (vehicle_type == "x500") return 0;
+	if (vehicle_type == "x500" || vehicle_type == "x500_lidar_2d") return 0;
 	else if (vehicle_type == "rover_ackermann") return 1;
 	else if (vehicle_type == "boat") return 2;
 	else if (vehicle_type == "lc_62") return 3;

@@ -13,7 +13,7 @@ ImageReceiver::ImageReceiver(const rclcpp::NodeOptions & options)
 : rclcpp_lifecycle::LifecycleNode("image_receiver", options)
 {
   declare_parameter<std::string>("vehicle_type", "x500");
-  declare_parameter<int>("vehicle_num", 0);
+  declare_parameter<int>("vehicle_id", 0);
   declare_parameter<std::string>("unreal_ip", "127.0.0.1");
   declare_parameter<int>("rtsp_port", 8554);
   declare_parameter<std::string>("camera_type", "front");
@@ -27,16 +27,16 @@ ImageReceiver::~ImageReceiver()
 CallbackReturn ImageReceiver::on_configure(const rclcpp_lifecycle::State &)
 {
   vehicle_type_ = get_parameter("vehicle_type").as_string();
-  vehicle_num_  = get_parameter("vehicle_num").as_int();
+  vehicle_id_   = get_parameter("vehicle_id").as_int();
   unreal_ip_    = get_parameter("unreal_ip").as_string();
   rtsp_port_    = get_parameter("rtsp_port").as_int();
   camera_type_  = get_parameter("camera_type").as_string();
 
   rtsp_url_ = "rtsp://" + unreal_ip_ + ":" + std::to_string(rtsp_port_) +
-              "/" + vehicle_type_ + "_" + std::to_string(vehicle_num_) +
+              "/" + vehicle_type_ + "_" + std::to_string(vehicle_id_) +
               "/" + camera_type_;
 
-  topic_ = "/" + vehicle_type_ + "_" + std::to_string(vehicle_num_) +
+  topic_ = "/vehicle" + std::to_string(vehicle_id_ + 1) +
            "/camera/" + camera_type_ + "/image_raw";
 
   gst_pipeline_ =
@@ -129,7 +129,7 @@ void ImageReceiver::capture_loop()
     ).toImageMsg();
 
     msg->header.stamp = now();
-    msg->header.frame_id = vehicle_type_ + "_" + std::to_string(vehicle_num_) +
+    msg->header.frame_id = "vehicle" + std::to_string(vehicle_id_ + 1) +
                            "_" + camera_type_;
 
     publisher_->publish(*msg);

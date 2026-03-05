@@ -22,7 +22,7 @@ vehicles:
     spawnpoint : (18.846, -19.053, -0.8, -3.14)
 
   2 :
-    type : x500
+    type : x500_lidar_2d
     build_target : 0
     spawnpoint : (18.846, -36.317, -0.3, -3.14)
 
@@ -32,7 +32,7 @@ vehicles:
     spawnpoint : (-24.458, -12.013, 0.3, -3.14)
 
   4 :
-    type : x500
+    type : x500_lidar_2d
     build_target : 0
     spawnpoint : (-24.458, 16.23, 0.5, -3.14)
 

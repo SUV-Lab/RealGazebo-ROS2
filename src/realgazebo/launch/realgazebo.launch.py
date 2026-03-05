@@ -26,18 +26,34 @@ from launch.actions import (
 )
 from launch.event_handlers import OnProcessStart, OnProcessExit
 
-support_vehicle = ["x500", "rover_ackermann", "lc_62", "boat"]
+support_vehicle = ["x500", "x500_lidar_2d", "rover_ackermann", "lc_62", "boat"]
 support_obstacle = ["rock"]
 without_px4 = []
 
 VEHICLE_CAMERAS = {
     'x500': ['front', 'bottom'],
+    'x500_lidar_2d': ['front', 'bottom'],
     'lc_62': ['front', 'bottom'],
     'rover_ackermann': ['front', 'top'],
     'boat': ['front', 'top'],
 }
 
-# Vehicle type to autostart ID mapping (will be populated dynamically)
+UE5_VEHICLE_TYPE = {
+    'x500_lidar_2d': 'x500',
+}
+
+VEHICLE_BRIDGES = {
+    'x500_lidar_2d': [
+        {
+            'ros_topic_name': '/vehicle{vehicle_num}/scan',
+            'gz_topic_name': '/world/{world}/model/{vehicle_type}_{vehicle_id}/link/link/sensor/lidar_2d_v2/scan',
+            'ros_type_name': 'sensor_msgs/msg/LaserScan',
+            'gz_type_name': 'gz.msgs.LaserScan',
+            'direction': 'GZ_TO_ROS',
+        }
+    ]
+}
+
 
 def create_timed_actions(actions_list, initial_delay, interval):
     timed_actions = []
@@ -332,15 +348,16 @@ def launch_setup(context, *args, **kwargs):
                 executable='image_receiver_node',
                 name=f'image_receiver_{vehicle_type}_{vehicle["id"]}_{camera_type}',
                 parameters=[{
-                    'vehicle_type': vehicle_type,
-                    'vehicle_num': vehicle['id'],
+                    'vehicle_type': UE5_VEHICLE_TYPE.get(vehicle_type, vehicle_type),
+                    'vehicle_id': vehicle['id'],
                     'unreal_ip': unreal_ip,
                     'rtsp_port': int(rtsp_port),
                     'camera_type': camera_type,
                 }]
             )
             uv_process_list.append(receiver_node)
-    
+
+
     for obstacle in obstacle_lst:
         obstacle_type = obstacle['type']
         spawn_entity = IncludeLaunchDescription(
@@ -372,12 +389,40 @@ def launch_setup(context, *args, **kwargs):
         px4_param_process = ExecuteProcess(cmd=px4_param_cmd)
         uv_process_list.append(px4_param_process)
 
-    gz_timesync_node = Node(
+    # Build combined bridge config: clock + all vehicle sensor bridges
+    gz_bridge_entries = [
+        {
+            'ros_topic_name': '/clock',
+            'gz_topic_name': '/clock',
+            'ros_type_name': 'rosgraph_msgs/msg/Clock',
+            'gz_type_name': 'gz.msgs.Clock',
+            'direction': 'GZ_TO_ROS',
+        }
+    ]
+    for vehicle in vehicle_lst:
+        vehicle_type = vehicle['type']
+        for b in VEHICLE_BRIDGES.get(vehicle_type, []):
+            gz_bridge_entries.append({
+                'ros_topic_name': b['ros_topic_name'].format(
+                    vehicle_num=vehicle['id'] + 1),
+                'gz_topic_name': b['gz_topic_name'].format(
+                    vehicle_type=vehicle_type, vehicle_id=vehicle['id'],
+                    world='c-track'),
+                'ros_type_name': b['ros_type_name'],
+                'gz_type_name': b['gz_type_name'],
+                'direction': b['direction'],
+            })
+
+    os.makedirs('/tmp/bridges', exist_ok=True)
+    combined_cfg_path = '/tmp/bridges/combined.yaml'
+    with open(combined_cfg_path, 'w') as f:
+        yaml.dump(gz_bridge_entries, f)
+
+    gz_bridge_node = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
-        arguments=[
-            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'
-        ]
+        name='gz_bridge',
+        parameters=[{'config_file': combined_cfg_path}]
     )
 
     uv_actions_with_delays = create_timed_actions(
@@ -402,7 +447,7 @@ def launch_setup(context, *args, **kwargs):
         gazebo_node,
         *uv_actions_with_delays,
         *obstacle_actions_with_delays,
-        gz_timesync_node
+        gz_bridge_node
     ]
 
     return nodes_to_start

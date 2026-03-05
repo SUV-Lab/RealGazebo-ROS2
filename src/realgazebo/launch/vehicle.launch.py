@@ -10,6 +10,7 @@ This launch file starts a single vehicle instance with:
 """
 
 import os
+import yaml
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -28,6 +29,19 @@ from launch.actions import (
     IncludeLaunchDescription,
     SetEnvironmentVariable,
 )
+
+
+VEHICLE_BRIDGES = {
+    'x500_lidar_2d': [
+        {
+            'ros_topic_name': '/vehicle{vehicle_num}/scan',
+            'gz_topic_name': '/world/{world}/model/{vehicle_type}_{vehicle_id}/link/link/sensor/lidar_2d_v2/scan',
+            'ros_type_name': 'sensor_msgs/msg/LaserScan',
+            'gz_type_name': 'gz.msgs.LaserScan',
+            'direction': 'GZ_TO_ROS',
+        }
+    ]
+}
 
 
 def scan_airframes_directory(px4_build_path):
@@ -256,6 +270,32 @@ def launch_setup(context, *args, **kwargs):
         output='screen'
     )
     timed_actions.append(network_sim_node)
+
+    # sensor bridge (only if defined for this vehicle type)
+    if vehicle_type in VEHICLE_BRIDGES:
+        rendered = []
+        for b in VEHICLE_BRIDGES[vehicle_type]:
+            rendered.append({
+                'ros_topic_name': b['ros_topic_name'].format(
+                    vehicle_num=instance_id + 1),
+                'gz_topic_name': b['gz_topic_name'].format(
+                    vehicle_type=vehicle_type, vehicle_id=instance_id,
+                    world='c-track'),
+                'ros_type_name': b['ros_type_name'],
+                'gz_type_name': b['gz_type_name'],
+                'direction': b['direction'],
+            })
+        os.makedirs('/tmp/bridges', exist_ok=True)
+        bridge_cfg_path = f'/tmp/bridges/{vehicle_type}_{instance_id}.yaml'
+        with open(bridge_cfg_path, 'w') as f:
+            yaml.dump(rendered, f)
+        bridge_node = Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            name=f'sensor_bridge_{vehicle_type}_{instance_id}',
+            parameters=[{'config_file': bridge_cfg_path}]
+        )
+        timed_actions.append(bridge_node)
 
     # Apply timing: spawn at T+10s, then 5s interval for subsequent actions
     # Increased delays to ensure gz-transport discovery completes before PX4 subscribes

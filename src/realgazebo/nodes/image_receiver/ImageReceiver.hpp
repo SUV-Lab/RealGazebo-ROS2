@@ -36,7 +36,7 @@ private:
   void stop_capture();
 
   std::string vehicle_type_;
-  int vehicle_num_;
+  int vehicle_id_;
   std::string unreal_ip_;
   int rtsp_port_;
   std::string camera_type_;

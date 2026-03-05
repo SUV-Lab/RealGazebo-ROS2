@@ -55,7 +55,7 @@ class ImageSubscriber(Node):
             self.get_logger().info('image_receiver already active, skipping lifecycle setup')
 
         topic = (
-            f'/{self.vehicle_type}_{self.vehicle_num}'
+            f'/vehicle{self.vehicle_num + 1}'
             f'/camera/{self.camera_type}/image_raw'
         )
         self.subscription = self.create_subscription(
@@ -90,7 +90,7 @@ class ImageSubscriber(Node):
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
             cv2.imshow(
-                f"{self.vehicle_type}_{self.vehicle_num}/{self.camera_type}",
+                f"vehicle{self.vehicle_num + 1}/{self.camera_type}",
                 frame,
             )
             cv2.waitKey(1)
