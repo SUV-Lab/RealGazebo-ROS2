@@ -11,6 +11,7 @@ This launch file starts a single vehicle instance with:
 
 import os
 import yaml
+import xml.etree.ElementTree as ET
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -31,17 +32,54 @@ from launch.actions import (
 )
 
 
-VEHICLE_BRIDGES = {
-    'x500_lidar_2d': [
-        {
-            'ros_topic_name': '/vehicle{vehicle_num}/scan',
-            'gz_topic_name': '/world/{world}/model/{vehicle_type}_{vehicle_id}/link/link/sensor/lidar_2d_v2/scan',
-            'ros_type_name': 'sensor_msgs/msg/LaserScan',
-            'gz_type_name': 'gz.msgs.LaserScan',
-            'direction': 'GZ_TO_ROS',
-        }
-    ]
+SENSOR_BRIDGE_TYPES = {
+    'gpu_lidar': [
+        ('scan',        'sensor_msgs/msg/LaserScan',   'gz.msgs.LaserScan'),
+        ('scan/points', 'sensor_msgs/msg/PointCloud2', 'gz.msgs.PointCloudPacked'),
+    ],
 }
+
+
+def get_sensor_bridges(vehicle_type, vehicle_id, world, model_search_paths=None):
+    sdf_path = f'/tmp/models/{vehicle_type}.sdf'
+    if not os.path.exists(sdf_path):
+        return []
+    model = ET.parse(sdf_path).getroot().find('model')
+    if model is None:
+        return []
+
+    bridges = []
+    vehicle_num = vehicle_id + 1
+
+    def add_entries(link_name, sensor_name, sensor_type):
+        for suffix, ros_type, gz_type in SENSOR_BRIDGE_TYPES.get(sensor_type, []):
+            bridges.append({
+                'ros_topic_name': f'/vehicle{vehicle_num}/{suffix}',
+                'gz_topic_name': f'/world/{world}/model/{vehicle_type}_{vehicle_id}/link/{link_name}/sensor/{sensor_name}/{suffix}',
+                'ros_type_name': ros_type,
+                'gz_type_name': gz_type,
+                'direction': 'GZ_TO_ROS',
+            })
+
+    for link in model.findall('link'):
+        for sensor in link.findall('sensor'):
+            add_entries(link.get('name'), sensor.get('name'), sensor.get('type'))
+
+    if model_search_paths:
+        for include in model.findall('include'):
+            uri = include.findtext('uri', '')
+            model_name = uri.replace('model://', '')
+            for search_path in model_search_paths:
+                inc_sdf = os.path.join(search_path, model_name, 'model.sdf')
+                if os.path.exists(inc_sdf):
+                    inc_model = ET.parse(inc_sdf).getroot().find('model')
+                    if inc_model:
+                        for link in inc_model.findall('link'):
+                            for sensor in link.findall('sensor'):
+                                add_entries(link.get('name'), sensor.get('name'), sensor.get('type'))
+                    break
+
+    return bridges
 
 
 def scan_airframes_directory(px4_build_path):
@@ -271,24 +309,17 @@ def launch_setup(context, *args, **kwargs):
     )
     timed_actions.append(network_sim_node)
 
-    # sensor bridge (only if defined for this vehicle type)
-    if vehicle_type in VEHICLE_BRIDGES:
-        rendered = []
-        for b in VEHICLE_BRIDGES[vehicle_type]:
-            rendered.append({
-                'ros_topic_name': b['ros_topic_name'].format(
-                    vehicle_num=instance_id + 1),
-                'gz_topic_name': b['gz_topic_name'].format(
-                    vehicle_type=vehicle_type, vehicle_id=instance_id,
-                    world='c-track'),
-                'ros_type_name': b['ros_type_name'],
-                'gz_type_name': b['gz_type_name'],
-                'direction': b['direction'],
-            })
+    # sensor bridge (inferred from rendered SDF)
+    model_search_paths = [
+        os.path.join(current_package_path, 'models'),
+        os.path.join(gazebo_path, 'models'),
+    ]
+    sensor_bridges = get_sensor_bridges(vehicle_type, instance_id, 'c-track', model_search_paths)
+    if sensor_bridges:
         os.makedirs('/tmp/bridges', exist_ok=True)
         bridge_cfg_path = f'/tmp/bridges/{vehicle_type}_{instance_id}.yaml'
         with open(bridge_cfg_path, 'w') as f:
-            yaml.dump(rendered, f)
+            yaml.dump(sensor_bridges, f)
         bridge_node = Node(
             package='ros_gz_bridge',
             executable='parameter_bridge',
