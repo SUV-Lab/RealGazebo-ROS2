@@ -15,7 +15,9 @@ public:
     double reference_distance_m = 1.0,
     double reference_path_loss_db = 40.0,
     double max_retransmission_delay_ms = 50.0,
-    double max_jitter_ms = 20.0);
+    double max_jitter_ms = 20.0,
+    double baseline_latency_ms = 2.0,
+    double baseline_jitter_ms = 0.5);
 
   CommunicationQuality calculate(double distance_m, int vehicles_in_range = 1) override;
   std::string get_model_name() const override;
@@ -28,6 +30,8 @@ private:
   double reference_path_loss_db_;
   double max_retransmission_delay_ms_;
   double max_jitter_ms_;
+  double baseline_latency_ms_;
+  double baseline_jitter_ms_;
 
   // Speed of light (m/s)
   static constexpr double SPEED_OF_LIGHT = 3.0e8;

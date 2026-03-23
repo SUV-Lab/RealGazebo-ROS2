@@ -10,10 +10,10 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
-  <depend>px4_msgs</depend>
   <depend>std_srvs</depend>
-  <depend>std_msgs</depend>
   <depend>diagnostic_msgs</depend>
+  <depend>gz-transport13</depend>
+  <depend>gz-msgs10</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

@@ -3,10 +3,10 @@
 #include "network_sim/congestion_aware_model.hpp"
 #include "network_sim/tc_controller_node.hpp"
 
-#include <regex>
 #include <chrono>
 #include <functional>
 #include <cmath>
+#include <sstream>
 
 namespace network_sim
 {
@@ -18,34 +18,62 @@ V2VCommModelNode::V2VCommModelNode(
   tc_controller_(tc_controller)
 {
   // Declare and get parameters
-  this->declare_parameter("scan_interval", 2.0);
-  this->declare_parameter("reference_vehicle_id", 1);  // Default to 1 (maps to /vehicle1)
+  this->declare_parameter("instance_id", 0);
   this->declare_parameter("distance_calculation_interval", 1.0);
-  this->declare_parameter("stale_position_timeout_sec", 5.0);
+  this->declare_parameter("gz_world_name", "c-track");
+  this->declare_parameter("vehicle_models", "");
 
   this->declare_parameter("comm_model_type", "log_distance");
   this->declare_parameter("tx_power_dbm", 20.0);
   this->declare_parameter("path_loss_exponent", 2.5);
   this->declare_parameter("max_retransmission_delay_ms", 50.0);
   this->declare_parameter("max_jitter_ms", 20.0);
+  this->declare_parameter("baseline_latency_ms", 2.0);
+  this->declare_parameter("baseline_jitter_ms", 0.5);
 
-  this->declare_parameter("enable_congestion_model", true);
+  this->declare_parameter("enable_congestion_model", false);
   this->declare_parameter("rssi_range_threshold_dbm", -90.0);
   this->declare_parameter("congestion_plr_factor", 0.4);
   this->declare_parameter("congestion_plr_alpha", 0.2);
   this->declare_parameter("congestion_latency_beta", 0.4);
   this->declare_parameter("congestion_jitter_gamma", 0.3);
 
-  scan_interval_sec_ = this->get_parameter("scan_interval").as_double();
-  reference_vehicle_id_ = this->get_parameter("reference_vehicle_id").as_int();
+  instance_id_ = this->get_parameter("instance_id").as_int();
   distance_calculation_interval_ = this->get_parameter("distance_calculation_interval").as_double();
-  stale_position_timeout_sec_ = this->get_parameter("stale_position_timeout_sec").as_double();
+  gz_world_name_ = this->get_parameter("gz_world_name").as_string();
+
+  // Parse vehicle_models: "x500_0,lc_62_1,boat_8" -> map<name, id>
+  std::string models_str = this->get_parameter("vehicle_models").as_string();
+  if (!models_str.empty()) {
+    std::istringstream ss(models_str);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+      // Extract ID from last underscore: "x500_0" -> 0, "lc_62_1" -> 1
+      auto last_underscore = token.rfind('_');
+      if (last_underscore != std::string::npos) {
+        int vid = std::stoi(token.substr(last_underscore + 1));
+        vehicle_model_map_[token] = vid;
+      }
+    }
+  }
+
+  if (vehicle_model_map_.empty()) {
+    RCLCPP_WARN(this->get_logger(),
+      "No vehicle_models parameter provided. Pose tracking may match incorrect models.");
+  } else {
+    RCLCPP_INFO(this->get_logger(), "Tracking %zu vehicle models:", vehicle_model_map_.size());
+    for (const auto & [name, vid] : vehicle_model_map_) {
+      RCLCPP_INFO(this->get_logger(), "  %s -> vehicle_id=%d", name.c_str(), vid);
+    }
+  }
 
   comm_model_type_ = this->get_parameter("comm_model_type").as_string();
   tx_power_dbm_ = this->get_parameter("tx_power_dbm").as_double();
   path_loss_exponent_ = this->get_parameter("path_loss_exponent").as_double();
   max_retransmission_delay_ms_ = this->get_parameter("max_retransmission_delay_ms").as_double();
   max_jitter_ms_ = this->get_parameter("max_jitter_ms").as_double();
+  baseline_latency_ms_ = this->get_parameter("baseline_latency_ms").as_double();
+  baseline_jitter_ms_ = this->get_parameter("baseline_jitter_ms").as_double();
 
   enable_congestion_model_ = this->get_parameter("enable_congestion_model").as_bool();
   rssi_range_threshold_dbm_ = this->get_parameter("rssi_range_threshold_dbm").as_double();
@@ -54,14 +82,10 @@ V2VCommModelNode::V2VCommModelNode(
   congestion_latency_beta_ = this->get_parameter("congestion_latency_beta").as_double();
   congestion_jitter_gamma_ = this->get_parameter("congestion_jitter_gamma").as_double();
 
-  // Initialize state flags
-  reference_found_ = false;
-  reference_warning_shown_ = false;
-
   RCLCPP_INFO(
     this->get_logger(),
-    "Parameters: scan_interval=%.1fs, reference_vehicle_id=%d, distance_calculation_interval=%.1fs",
-    scan_interval_sec_, reference_vehicle_id_, distance_calculation_interval_);
+    "Parameters: instance_id=%d, distance_calculation_interval=%.1fs, gz_world=%s",
+    instance_id_, distance_calculation_interval_, gz_world_name_.c_str());
 
   RCLCPP_INFO(
     this->get_logger(),
@@ -71,130 +95,84 @@ V2VCommModelNode::V2VCommModelNode(
   // Initialize communication model
   initialize_communication_model();
 
-  // Create timer for periodic topic scanning
-  scan_timer_ = this->create_wall_timer(
-    std::chrono::duration<double>(scan_interval_sec_),
-    std::bind(&V2VCommModelNode::scan_and_subscribe_topics, this));
+  // Subscribe to Gazebo dynamic_pose/info via gz-transport
+  std::string gz_topic = "/world/" + gz_world_name_ + "/dynamic_pose/info";
+  if (!gz_node_.Subscribe(gz_topic, &V2VCommModelNode::gz_pose_callback, this)) {
+    RCLCPP_FATAL(
+      this->get_logger(),
+      "Failed to subscribe to Gazebo topic: %s",
+      gz_topic.c_str());
+  } else {
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Subscribed to Gazebo topic: %s (via gazebo-network, TC-free)",
+      gz_topic.c_str());
+  }
 
   // Create timer for periodic distance calculation
   distance_timer_ = this->create_wall_timer(
     std::chrono::duration<double>(distance_calculation_interval_),
-    std::bind(&V2VCommModelNode::calculate_and_print_distances, this));
-
-  // Perform initial scan
-  scan_and_subscribe_topics();
+    std::bind(&V2VCommModelNode::calculate_and_apply_distances, this));
 }
 
-void V2VCommModelNode::scan_and_subscribe_topics()
+void V2VCommModelNode::gz_pose_callback(const gz::msgs::Pose_V & msg)
 {
-  // Get all active topics
-  auto topic_names_and_types = this->get_topic_names_and_types();
+  std::lock_guard<std::mutex> lock(pose_mutex_);
 
-  // Regular expression to match /vehicleN/fmu/out/vehicle_global_position
-  std::regex topic_pattern(R"(/vehicle(\d+)/fmu/out/vehicle_global_position)");
-  std::smatch match;
+  for (int i = 0; i < msg.pose_size(); ++i) {
+    const auto & pose = msg.pose(i);
+    const std::string & name = pose.name();
 
-  // Scan for vehicle_global_position topics
-  for (const auto & [topic_name, topic_types] : topic_names_and_types) {
-    if (std::regex_match(topic_name, match, topic_pattern)) {
-      // Extract vehicle ID from topic name
-      int vehicle_id = std::stoi(match[1].str());
-
-      // Check if we're already subscribed to this vehicle
-      if (subscriptions_.find(vehicle_id) != subscriptions_.end()) {
-        continue;  // Already subscribed
-      }
-
-      // Create new subscription for this vehicle
-      RCLCPP_INFO(
-        this->get_logger(),
-        "Found and subscribing to: %s (Vehicle ID: %d)",
-        topic_name.c_str(),
-        vehicle_id);
-
-      auto subscription = this->create_subscription<px4_msgs::msg::VehicleGlobalPosition>(
-        topic_name,
-        rclcpp::SensorDataQoS(),
-        [this, vehicle_id](const px4_msgs::msg::VehicleGlobalPosition::SharedPtr msg) {
-          this->vehicle_global_position_callback(vehicle_id, msg);
-        });
-
-      // Store subscription in map
-      subscriptions_[vehicle_id] = subscription;
+    int vid = lookup_vehicle_id(name);
+    if (vid < 0) {
+      continue;  // Not a known vehicle model
     }
+
+    latest_poses_[vid] = VehiclePose{
+      pose.position().x(),
+      pose.position().y(),
+      pose.position().z()
+    };
   }
 }
 
-void V2VCommModelNode::vehicle_global_position_callback(
-  int vehicle_id,
-  const px4_msgs::msg::VehicleGlobalPosition::SharedPtr msg)
+int V2VCommModelNode::lookup_vehicle_id(const std::string & model_name)
 {
-  // Store latest position data
-  latest_positions_[vehicle_id] = msg;
-
-  // Record timestamp when position was updated
-  position_timestamps_[vehicle_id] = this->now();
+  auto it = vehicle_model_map_.find(model_name);
+  if (it != vehicle_model_map_.end()) {
+    return it->second;
+  }
+  return -1;  // Not a known vehicle model
 }
 
-void V2VCommModelNode::calculate_and_print_distances()
+void V2VCommModelNode::calculate_and_apply_distances()
 {
-  // Check if reference vehicle exists
-  if (latest_positions_.find(reference_vehicle_id_) == latest_positions_.end()) {
-    if (!reference_warning_shown_) {
-      RCLCPP_WARN(
-        this->get_logger(),
-        "Waiting for reference vehicle %d...",
-        reference_vehicle_id_);
-      reference_warning_shown_ = true;
-    }
+  std::lock_guard<std::mutex> lock(pose_mutex_);
+
+  // Check if reference vehicle (this container's vehicle) exists
+  if (latest_poses_.find(instance_id_) == latest_poses_.end()) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(),
+      *this->get_clock(),
+      5000,
+      "Waiting for reference vehicle %d pose from Gazebo...",
+      instance_id_);
     return;
   }
 
-  // Mark reference vehicle as found and notify user
-  if (!reference_found_) {
-    RCLCPP_INFO(
-      this->get_logger(),
-      "Reference vehicle %d found! Starting distance calculations.",
-      reference_vehicle_id_);
-    reference_found_ = true;
-  }
+  const auto & ref_pose = latest_poses_[instance_id_];
 
-  // Get reference position
-  auto ref_pos = latest_positions_[reference_vehicle_id_];
-
-  // Prepare vector for direct communication with TC controller
-  std::vector<CommunicationQuality> qualities;
-
-  // Count vehicles in communication range
-  int vehicles_in_range = 1;  // Include reference vehicle itself
-
-  // Pre-calculate distance threshold from RSSI threshold for performance
-  // RSSI = TxPower - (PL0 + 10*n*log10(d/d0))
-  // Solving for d: d = d0 * 10^((TxPower - RSSI - PL0)/(10*n))
+  // Pre-calculate distance threshold from RSSI threshold
   double distance_threshold_m = 1.0 * pow(10.0,
     (tx_power_dbm_ - rssi_range_threshold_dbm_ - 40.0) / (10.0 * path_loss_exponent_));
 
-  for (const auto & [vid, pos] : latest_positions_) {
-    if (vid == reference_vehicle_id_) continue;
-
-    // Check if position data is stale
-    auto now = this->now();
-    auto timestamp_it = position_timestamps_.find(vid);
-
-    if (timestamp_it != position_timestamps_.end()) {
-      double age_sec = (now - timestamp_it->second).seconds();
-
-      if (age_sec > stale_position_timeout_sec_) {
-        // Position is stale - reset TC rules to allow reconnection
-        handle_stale_position(vid, age_sec);
-        continue;  // Skip this vehicle in distance calculations
-      }
-    }
-
-    double dist = calculate_haversine_distance(
-      ref_pos->lat, ref_pos->lon, pos->lat, pos->lon);
-
-    // Count if within distance threshold
+  // Count vehicles in communication range
+  int vehicles_in_range = 1;  // Include reference vehicle itself
+  for (const auto & [vid, pose] : latest_poses_) {
+    if (vid == instance_id_) continue;
+    double dist = calculate_euclidean_distance(
+      ref_pose.x, ref_pose.y, ref_pose.z,
+      pose.x, pose.y, pose.z);
     if (dist <= distance_threshold_m) {
       vehicles_in_range++;
     }
@@ -203,80 +181,66 @@ void V2VCommModelNode::calculate_and_print_distances()
   // Print header
   RCLCPP_INFO(
     this->get_logger(),
-    "\n=== Distances and Communication Quality from Reference Vehicle %d ===\n"
+    "\n=== Distances from Vehicle %d (Gazebo pose) ===\n"
     "    Vehicles in Range: %d (threshold: %.1f dBm, %.0f m)",
-    reference_vehicle_id_,
+    instance_id_,
     vehicles_in_range,
     rssi_range_threshold_dbm_,
     distance_threshold_m);
 
-  // Calculate and print distances and communication quality for all vehicles
-  for (const auto & [vehicle_id, pos] : latest_positions_) {
-    if (vehicle_id == reference_vehicle_id_) {
-      RCLCPP_INFO(this->get_logger(), "  Vehicle %d: [REFERENCE]", vehicle_id);
-    } else {
-      // Calculate distance
-      double distance = calculate_haversine_distance(
-        ref_pos->lat, ref_pos->lon,
-        pos->lat, pos->lon);
+  // Calculate communication quality for all other vehicles
+  std::vector<CommunicationQuality> qualities;
 
-      // Calculate communication quality
-      auto quality = comm_model_->calculate(distance, vehicles_in_range);
-
-      // Set vehicle IDs
-      quality.source_vehicle_id = reference_vehicle_id_;
-      quality.dest_vehicle_id = vehicle_id;
-
-      // Print comprehensive results
-      RCLCPP_INFO(
-        this->get_logger(),
-        "  Vehicle %d:\n"
-        "    Distance: %.2f m\n"
-        "    RSSI: %.1f dBm\n"
-        "    Packet Loss Rate: %.1f%%\n"
-        "    Latency: %.2f ms\n"
-        "    Jitter: %.2f ms",
-        vehicle_id,
-        quality.distance_m,
-        quality.rssi_dbm,
-        quality.packet_loss_rate * 100.0,
-        quality.latency_ms,
-        quality.jitter_ms);
-
-      // Add to qualities vector for direct TC controller communication
-      qualities.push_back(quality);
+  for (const auto & [vid, pose] : latest_poses_) {
+    if (vid == instance_id_) {
+      RCLCPP_INFO(this->get_logger(), "  Vehicle %d: [REFERENCE]", vid);
+      continue;
     }
+
+    double distance = calculate_euclidean_distance(
+      ref_pose.x, ref_pose.y, ref_pose.z,
+      pose.x, pose.y, pose.z);
+
+    auto quality = comm_model_->calculate(distance, vehicles_in_range);
+
+    // dest_vehicle_id uses ROS2 convention (instance_id + 1)
+    quality.source_vehicle_id = instance_id_ + 1;
+    quality.dest_vehicle_id = vid + 1;
+
+    RCLCPP_INFO(
+      this->get_logger(),
+      "  Vehicle %d:\n"
+      "    Distance: %.2f m\n"
+      "    RSSI: %.1f dBm\n"
+      "    Packet Loss Rate: %.1f%%\n"
+      "    Latency: %.2f ms\n"
+      "    Jitter: %.2f ms",
+      vid,
+      quality.distance_m,
+      quality.rssi_dbm,
+      quality.packet_loss_rate * 100.0,
+      quality.latency_ms,
+      quality.jitter_ms);
+
+    qualities.push_back(quality);
   }
 
-  // Directly call TC controller (bypassing ROS2 topic)
+  // Apply to TC controller
   if (!qualities.empty()) {
     if (auto tc = tc_controller_.lock()) {
       tc->apply_quality_metrics(qualities);
-
-      // Log summary (user requested)
-      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-        "Vehicle %d: Calculated quality for %zu vehicles, applied to TC controller",
-        reference_vehicle_id_, qualities.size());
     }
   }
 }
 
-double V2VCommModelNode::calculate_haversine_distance(
-  double lat1, double lon1, double lat2, double lon2)
+double V2VCommModelNode::calculate_euclidean_distance(
+  double x1, double y1, double z1,
+  double x2, double y2, double z2)
 {
-  const double R = 6371000.0;  // Earth radius in meters
-
-  double lat1_rad = lat1 * M_PI / 180.0;
-  double lat2_rad = lat2 * M_PI / 180.0;
-  double delta_lat = (lat2 - lat1) * M_PI / 180.0;
-  double delta_lon = (lon2 - lon1) * M_PI / 180.0;
-
-  double a = sin(delta_lat / 2.0) * sin(delta_lat / 2.0) +
-             cos(lat1_rad) * cos(lat2_rad) *
-             sin(delta_lon / 2.0) * sin(delta_lon / 2.0);
-  double c = 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
-
-  return R * c;  // Distance in meters
+  double dx = x2 - x1;
+  double dy = y2 - y1;
+  double dz = z2 - z1;
+  return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 void V2VCommModelNode::initialize_communication_model()
@@ -291,7 +255,9 @@ void V2VCommModelNode::initialize_communication_model()
       1.0,  // reference_distance_m
       40.0, // reference_path_loss_db
       max_retransmission_delay_ms_,
-      max_jitter_ms_
+      max_jitter_ms_,
+      baseline_latency_ms_,
+      baseline_jitter_ms_
     );
   } else {
     RCLCPP_ERROR(
@@ -321,24 +287,6 @@ void V2VCommModelNode::initialize_communication_model()
       this->get_logger(),
       "Using communication model: %s (congestion disabled)",
       comm_model_->get_model_name().c_str());
-  }
-}
-
-void V2VCommModelNode::handle_stale_position(int vehicle_id, double age_sec)
-{
-  // Reset TC rules for this vehicle to allow reconnection
-  if (auto tc = tc_controller_.lock()) {
-    tc->reset_impairments_for_stale_vehicle(vehicle_id);
-
-    // Log at INFO level, throttled to every 10 seconds
-    RCLCPP_INFO_THROTTLE(
-      this->get_logger(),
-      *this->get_clock(),
-      10000,  // 10 seconds
-      "Position data for vehicle %d is stale (%.1f seconds old). "
-      "Reset TC rules to allow reconnection.",
-      vehicle_id,
-      age_sec);
   }
 }
 

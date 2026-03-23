@@ -2,17 +2,28 @@
 #define NETWORK_SIM__V2V_COMM_MODEL_NODE_HPP_
 
 #include <map>
+#include <set>
 #include <string>
 #include <memory>
+#include <mutex>
 
 #include "rclcpp/rclcpp.hpp"
-#include "px4_msgs/msg/vehicle_global_position.hpp"
+#include <gz/transport/Node.hh>
+#include <gz/msgs/pose_v.pb.h>
+
 #include "network_sim/communication_model_interface.hpp"
 
 namespace network_sim
 {
 
 class TCControllerNode;  // Forward declaration
+
+struct VehiclePose
+{
+  double x;
+  double y;
+  double z;
+};
 
 class V2VCommModelNode : public rclcpp::Node
 {
@@ -22,48 +33,43 @@ public:
     std::weak_ptr<TCControllerNode> tc_controller = {});
 
 private:
-  // Scan for vehicle_global_position topics and subscribe to new ones
-  void scan_and_subscribe_topics();
+  // Callback for Gazebo dynamic_pose/info topic
+  void gz_pose_callback(const gz::msgs::Pose_V & msg);
 
-  // Callback for vehicle global position messages (stores position data only)
-  void vehicle_global_position_callback(
-    int vehicle_id,
-    const px4_msgs::msg::VehicleGlobalPosition::SharedPtr msg);
+  // Calculate and apply distances from reference vehicle (timer callback)
+  void calculate_and_apply_distances();
 
-  // Calculate and print distances from reference vehicle (timer callback)
-  void calculate_and_print_distances();
-
-  // Calculate Haversine distance between two lat/lon coordinates (in meters)
-  double calculate_haversine_distance(
-    double lat1, double lon1, double lat2, double lon2);
+  // Calculate Euclidean distance between two 3D positions (in meters)
+  double calculate_euclidean_distance(
+    double x1, double y1, double z1,
+    double x2, double y2, double z2);
 
   // Initialize communication model based on type
   void initialize_communication_model();
 
-  // Handle stale position data
-  void handle_stale_position(int vehicle_id, double age_sec);
+  // Look up vehicle ID from model name using the known vehicle_models map
+  int lookup_vehicle_id(const std::string & model_name);
 
-  // Timers
-  rclcpp::TimerBase::SharedPtr scan_timer_;
+  // Timer for periodic distance calculation
   rclcpp::TimerBase::SharedPtr distance_timer_;
 
-  // Map of vehicle_id to subscription
-  std::map<int, rclcpp::Subscription<px4_msgs::msg::VehicleGlobalPosition>::SharedPtr> subscriptions_;
+  // Gazebo transport node and subscriber
+  gz::transport::Node gz_node_;
 
-  // Map of vehicle_id to latest position
-  std::map<int, px4_msgs::msg::VehicleGlobalPosition::SharedPtr> latest_positions_;
-
-  // Map of vehicle_id to timestamp when position was last updated
-  std::map<int, rclcpp::Time> position_timestamps_;
+  // Map of vehicle_id to latest pose (protected by mutex)
+  std::map<int, VehiclePose> latest_poses_;
+  std::mutex pose_mutex_;
 
   // Communication model
   std::unique_ptr<CommunicationModelInterface> comm_model_;
 
+  // Known vehicle model names: model_name -> vehicle_id
+  std::map<std::string, int> vehicle_model_map_;
+
   // Parameters
-  double scan_interval_sec_;
   double distance_calculation_interval_;
-  int reference_vehicle_id_;
-  double stale_position_timeout_sec_;
+  int instance_id_;
+  std::string gz_world_name_;
 
   // Communication model parameters
   std::string comm_model_type_;
@@ -71,6 +77,8 @@ private:
   double path_loss_exponent_;
   double max_retransmission_delay_ms_;
   double max_jitter_ms_;
+  double baseline_latency_ms_;
+  double baseline_jitter_ms_;
 
   // Congestion model parameters
   bool enable_congestion_model_;
@@ -79,10 +87,6 @@ private:
   double congestion_plr_alpha_;
   double congestion_latency_beta_;
   double congestion_jitter_gamma_;
-
-  // State flags
-  bool reference_found_;
-  bool reference_warning_shown_;
 
   // Direct reference to TC controller for internal communication
   std::weak_ptr<TCControllerNode> tc_controller_;

@@ -110,6 +110,14 @@ def generate_compose_override(config, unreal_ip='host.docker.internal', unreal_p
     # Obstacles are not included in vehicle containers (they spawn in gazebo)
     support_obstacle = ['rock']
 
+    # Build vehicle model names list for network_sim (e.g., "x500_0,lc_62_1,boat_8")
+    vehicle_models = []
+    for v_id, v_info in vehicles.items():
+        v_t = v_info.get('type')
+        if v_t not in support_obstacle:
+            vehicle_models.append(f'{v_t}_{int(v_id)}')
+    vehicle_models_str = ','.join(vehicle_models)
+
     for vid, vehicle in vehicles.items():
         vid = int(vid)
         vtype = vehicle.get('type')
@@ -168,7 +176,7 @@ def generate_compose_override(config, unreal_ip='host.docker.internal', unreal_p
                     'condition': 'service_healthy'
                 }
             },
-            'command': f'bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo vehicle.launch.py instance_id:={vid} vehicle_type:={vtype} spawnpoint:={spawnpoint_str} px4_path:=/home/user/realgazebo/RealGazebo-PX4 unreal_ip:={unreal_ip} unreal_port:={unreal_port}"',
+            'command': f'bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo vehicle.launch.py instance_id:={vid} vehicle_type:={vtype} spawnpoint:={spawnpoint_str} px4_path:=/home/user/realgazebo/RealGazebo-PX4 unreal_ip:={unreal_ip} unreal_port:={unreal_port} vehicle_models:={vehicle_models_str}"',
             'deploy': {
                 'resources': {
                     'limits': {

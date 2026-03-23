@@ -11,13 +11,17 @@ LogDistanceModel::LogDistanceModel(
   double reference_distance_m,
   double reference_path_loss_db,
   double max_retransmission_delay_ms,
-  double max_jitter_ms)
+  double max_jitter_ms,
+  double baseline_latency_ms,
+  double baseline_jitter_ms)
 : tx_power_dbm_(tx_power_dbm),
   path_loss_exponent_(path_loss_exponent),
   reference_distance_m_(reference_distance_m),
   reference_path_loss_db_(reference_path_loss_db),
   max_retransmission_delay_ms_(max_retransmission_delay_ms),
-  max_jitter_ms_(max_jitter_ms)
+  max_jitter_ms_(max_jitter_ms),
+  baseline_latency_ms_(baseline_latency_ms),
+  baseline_jitter_ms_(baseline_jitter_ms)
 {
 }
 
@@ -44,14 +48,14 @@ CommunicationQuality LogDistanceModel::calculate(double distance_m, int vehicles
       (RSSI_EXCELLENT - quality.rssi_dbm) / (RSSI_EXCELLENT - RSSI_POOR);
   }
 
-  // 4. Calculate latency (propagation + retransmission)
+  // 4. Calculate latency (baseline + propagation + retransmission)
   double propagation_delay_ms = (distance_m / SPEED_OF_LIGHT) * 1000.0;
   double retransmission_delay_ms =
     quality.packet_loss_rate * max_retransmission_delay_ms_;
-  quality.latency_ms = propagation_delay_ms + retransmission_delay_ms;
+  quality.latency_ms = baseline_latency_ms_ + propagation_delay_ms + retransmission_delay_ms;
 
-  // 5. Calculate jitter (proportional to packet loss rate)
-  quality.jitter_ms = quality.packet_loss_rate * max_jitter_ms_;
+  // 5. Calculate jitter (baseline + proportional to packet loss rate)
+  quality.jitter_ms = baseline_jitter_ms_ + quality.packet_loss_rate * max_jitter_ms_;
 
   return quality;
 }

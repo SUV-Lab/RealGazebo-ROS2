@@ -8,10 +8,10 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(px4_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
-find_package(std_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
+find_package(gz-transport13 REQUIRED)
+find_package(gz-msgs10 REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -29,10 +29,13 @@ add_executable(network_sim_node
 
 ament_target_dependencies(network_sim_node
   rclcpp
-  px4_msgs
   std_srvs
-  std_msgs
   diagnostic_msgs
+)
+
+target_link_libraries(network_sim_node
+  gz-transport13::gz-transport13
+  gz-msgs10::gz-msgs10
 )
 
 # Install executable

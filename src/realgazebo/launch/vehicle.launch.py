@@ -144,6 +144,7 @@ def launch_setup(context, *args, **kwargs):
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
     start_control_node = LaunchConfiguration('start_control_node').perform(context).lower() == 'true'
+    vehicle_models_str = LaunchConfiguration('vehicle_models').perform(context)
 
     # Parse spawnpoint: "x,y,z,yaw"
     spawnpoint = [float(x.strip()) for x in spawnpoint_str.split(',')]
@@ -291,15 +292,17 @@ def launch_setup(context, *args, **kwargs):
         timed_actions.append(control_node)
 
     # 7. Network Simulator (V2V + TC Controller integrated with intra-process communication)
+    #    Uses Gazebo dynamic_pose topic (via gazebo-network) for position data,
+    #    bypassing vehicle-network TC rules to avoid oscillation.
     network_sim_node = Node(
         package='network_sim',
         executable='network_sim_node',
         namespace=f'network_sim_{instance_id}',
         parameters=[{
-            'reference_vehicle_id': instance_id + 1,
-            # TC controller parameters
             'instance_id': instance_id,
             'network_interface': 'eth1',
+            'gz_world_name': 'c-track',
+            'vehicle_models': vehicle_models_str,
             'enable_on_startup': True,
             'max_latency_ms': 1000.0,
             'max_jitter_ms': 500.0,
@@ -405,6 +408,14 @@ def generate_launch_description():
             default_value='false',
             description='Whether to start the drone controller node',
             choices=['true', 'false']
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'vehicle_models',
+            default_value='',
+            description='Comma-separated list of Gazebo model names (e.g., x500_0,lc_62_1,boat_8)'
         )
     )
 
