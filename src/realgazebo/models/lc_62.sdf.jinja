@@ -1306,6 +1306,15 @@
     </plugin>
     <plugin filename="MotorFailureROS2" name="custom::MotorFailureROS2System">
     </plugin>
+    <plugin filename="ServoFailureROS2" name="custom::ServoFailureROS2System">
+      <servoJointList>
+        <servoJoint name="left_ail_joint"/>
+        <servoJoint name="right_ail_joint"/>
+        <servoJoint name="left_elevator_joint"/>
+        <servoJoint name="right_elevator_joint"/>
+        <servoJoint name="rudder_joint"/>
+      </servoJointList>
+    </plugin>
     <plugin filename="libRealGazebo.so" name="custom::RealGazebo">
       <unreal_ip>{{ unreal_ip }}</unreal_ip>
       <unreal_port>{{ unreal_port }}</unreal_port>

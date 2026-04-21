@@ -58,6 +58,26 @@ ament_target_dependencies(MotorFailureROS2
   std_msgs
 )
 
+# Build ServoFailureROS2 plugin
+add_library(ServoFailureROS2 SHARED
+  plugins/servo_failure_ros2/ServoFailureSystem.cpp
+)
+
+target_include_directories(ServoFailureROS2 PRIVATE
+  plugins/servo_failure_ros2
+)
+
+target_link_libraries(ServoFailureROS2
+  gz-sim8::gz-sim8
+  gz-plugin2::gz-plugin2
+  gz-common5::gz-common5
+)
+
+ament_target_dependencies(ServoFailureROS2
+  rclcpp
+  std_msgs
+)
+
 # Get git version tag
 execute_process(
   COMMAND git describe --tags --always
@@ -171,7 +191,7 @@ target_link_libraries(image_receiver_node
   ${OpenCV_LIBS}
 )
 
-install(TARGETS RealGazebo MotorFailureROS2 image_receiver_node
+install(TARGETS RealGazebo MotorFailureROS2 ServoFailureROS2 image_receiver_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
