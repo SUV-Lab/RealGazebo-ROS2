@@ -2,6 +2,15 @@
 
 xhost +
 
+# Show git branch of this repo (works from any cwd; silent if not a git repo)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GIT_BRANCH="$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+if [[ -n "$GIT_BRANCH" ]]; then
+    echo "Git branch: $GIT_BRANCH"
+else
+    echo "Git branch: (not a git repository)"
+fi
+
 # Default values
 USE_GPU=true
 USE_GUI=false
