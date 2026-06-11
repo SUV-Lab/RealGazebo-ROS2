@@ -22,5 +22,9 @@ class VehicleRegistry:
         self._records[key] = record
         return record
 
+    def remove(self, vehicle_type, vehicle_id):
+        """Remove and return the record for (type, id), or None if not active."""
+        return self._records.pop((vehicle_type, vehicle_id), None)
+
     def active_ids(self):
         return sorted(self._records.keys())

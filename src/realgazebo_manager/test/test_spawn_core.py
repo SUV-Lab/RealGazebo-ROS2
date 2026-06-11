@@ -4,12 +4,13 @@ from realgazebo_manager import spawn_core
 
 def test_build_create_argv():
     argv = spawn_core.build_create_argv(
-        'x500', 3, '/tmp/models/x500.sdf', 'c-track', (1.0, 2.0, 3.0, 0.5))
+        'x500', 3, '/tmp/models/x500.sdf', 'c-track', (1.0, 2.0, 3.0), (0.0, 0.0, 0.5))
     assert argv == [
         'ros2', 'run', 'ros_gz_sim', 'create',
         '-world', 'c-track', '-file', '/tmp/models/x500.sdf',
         '-name', 'x500_3',
-        '-x', '1.0', '-y', '2.0', '-z', '3.0', '-Y', '0.5']
+        '-x', '1.0', '-y', '2.0', '-z', '3.0',
+        '-R', '0.0', '-P', '0.0', '-Y', '0.5']
 
 
 def test_build_px4_command(tmp_path):
@@ -43,3 +44,11 @@ def test_render_sdf(tmp_path):
         'x500', '10.0.0.5', 5005,
         models_dir=str(models), output_dir=str(tmp_path / "out"))
     assert "ip=10.0.0.5 port=5005" in open(out).read()
+
+
+def test_build_remove_argv():
+    argv = spawn_core.build_remove_argv('c-track', 'x500', 2)
+    assert argv == [
+        'gz', 'service', '-s', '/world/c-track/remove',
+        '--reqtype', 'gz.msgs.Entity', '--reptype', 'gz.msgs.Boolean',
+        '--timeout', '3000', '--req', 'name: "x500_2" type: MODEL']

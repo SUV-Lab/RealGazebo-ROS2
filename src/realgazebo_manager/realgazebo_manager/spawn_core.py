@@ -24,13 +24,19 @@ def render_sdf(vehicle_type, unreal_ip, unreal_port,
     return out_path
 
 
-def build_create_argv(vehicle_type, vehicle_id, sdf_path, world, spawnpoint):
-    x, y, z, yaw = spawnpoint
+def build_create_argv(vehicle_type, vehicle_id, sdf_path, world, position, rpy):
+    """Build the `ros2 run ros_gz_sim create` argv for one vehicle.
+
+    position is (x, y, z) in meters; rpy is (roll, pitch, yaw) in radians.
+    """
+    x, y, z = position
+    roll, pitch, yaw = rpy
     return [
         'ros2', 'run', 'ros_gz_sim', 'create',
         '-world', world, '-file', sdf_path,
         '-name', f'{vehicle_type}_{vehicle_id}',
-        '-x', str(x), '-y', str(y), '-z', str(z), '-Y', str(yaw),
+        '-x', str(x), '-y', str(y), '-z', str(z),
+        '-R', str(roll), '-P', str(pitch), '-Y', str(yaw),
     ]
 
 
@@ -58,3 +64,13 @@ def build_param_argv(spec, name, value):
     binary = os.path.join(
         spec.build_target_path, 'build/px4_sitl_default/bin/px4-param')
     return [binary, '--instance', str(spec.vehicle_id), 'set', name, str(value)]
+
+
+def build_remove_argv(world, vehicle_type, vehicle_id):
+    """Build a `gz service` call to remove a spawned model entity by name."""
+    name = f'{vehicle_type}_{vehicle_id}'
+    return [
+        'gz', 'service', '-s', f'/world/{world}/remove',
+        '--reqtype', 'gz.msgs.Entity', '--reptype', 'gz.msgs.Boolean',
+        '--timeout', '3000', '--req', f'name: "{name}" type: MODEL',
+    ]

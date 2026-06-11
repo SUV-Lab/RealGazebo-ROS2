@@ -21,3 +21,11 @@ def test_active_ids_sorted():
     r.add('boat', 1)
     r.add('x500', 0)
     assert r.active_ids() == [('boat', 1), ('x500', 0)]
+
+
+def test_remove():
+    r = VehicleRegistry()
+    rec = r.add('x500', 0)
+    assert r.remove('x500', 0) is rec
+    assert not r.is_active('x500', 0)
+    assert r.remove('x500', 0) is None
