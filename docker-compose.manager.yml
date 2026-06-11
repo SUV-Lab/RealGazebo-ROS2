@@ -1,0 +1,55 @@
+# Manager-driven multi-container mode (v3 DockerBackend).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.manager.yml up -d gazebo
+#   (runtime spawn/despawn = UDP packets on :5006; wire contract in src/realgazebo/realgazebo/protocol.py)
+#   docker compose -f docker-compose.yml -f docker-compose.manager.yml down
+#
+# The explicit -f list intentionally EXCLUDES docker-compose.override.yml
+# (the statically generated vehicle fleet): in this mode vehicles are
+# created at runtime by the manager, one sibling container per UDP spawn.
+
+networks:
+  # Fixed names (no compose project prefix) so the manager can attach
+  # runtime vehicle containers by the same names it was configured with.
+  gazebo-network:
+    name: gazebo-network
+  vehicle-network:
+    name: vehicle-network
+
+services:
+  gazebo:
+    networks:
+      # Also attach gazebo to vehicle-network: compose only creates networks
+      # referenced by started services, and in manager mode no static vehicle
+      # service exists to pull vehicle-network into existence. Vehicles sit
+      # at .10+, so .2 is free; the internal network adds no default route.
+      vehicle-network:
+        ipv4_address: 172.30.0.2
+    environment:
+      # Skip the entrypoint's usermod/chown walk over the baked home dir
+      # (minutes of delay); the manager + gz server run as root instead.
+      LOCAL_USER_ID: ""
+    ports:
+      - "5006:5006/udp"   # UE / host -> manager spawn & despawn commands
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev:/dev
+      - /var/run/docker.sock:/var/run/docker.sock   # sibling-container control
+      - .:/ws                                       # current manager code
+    working_dir: /ws
+    command: >
+      bash -c "git config --global --add safe.directory '*' &&
+      source /opt/ros/jazzy/setup.bash &&
+      source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash &&
+      colcon --log-base /tmp/cl build --packages-select realgazebo
+      --build-base /tmp/cb --install-base /tmp/ci &&
+      source /tmp/ci/setup.bash &&
+      ros2 launch realgazebo manager_sim.launch.py
+      yaml_path:=${MANAGER_YAML:-}
+      headless:=${HEADLESS:-true} world:=${WORLD:-c-track}
+      px4_path:=/home/user/realgazebo/RealGazebo-PX4
+      unreal_ip:=${UNREAL_IP:-host.docker.internal}
+      unreal_port:=${UNREAL_PORT:-5005}
+      backend:=docker
+      docker_image:=${VEHICLE_IMAGE:-aware4docker/realgazebo:1.2.1}"

@@ -27,8 +27,13 @@ class SubprocessBackend:
     the gz entity itself in both modes.
     """
 
-    def launch(self, spec, world, position, rpy, unreal_ip, unreal_port):
-        """Spawn the vehicle; return an opaque handle for kill()."""
+    def launch(self, spec, world, position, rpy, unreal_ip, unreal_port,
+               roster=None):
+        """Spawn the vehicle; return an opaque handle for kill().
+
+        roster is accepted for interface parity with DockerBackend and
+        ignored here (the monolithic mode has no per-container network_sim).
+        """
         sdf_path = render_sdf(spec.vehicle_type, unreal_ip, unreal_port)
         subprocess.run(
             build_create_argv(spec.vehicle_type, spec.vehicle_id, sdf_path,
@@ -92,12 +97,20 @@ class DockerBackend:
         # roster_fn() -> list of active 'type_id' names (for network_sim V2V)
         self._roster_fn = roster_fn
 
-    def launch(self, spec, world, position, rpy, unreal_ip, unreal_port):
+    def launch(self, spec, world, position, rpy, unreal_ip, unreal_port,
+               roster=None):
+        """Spawn one vehicle container; return its container id.
+
+        roster: complete vehicle_models list for network_sim. Boot-time YAML
+        spawns pass the full fleet (known upfront); when omitted (runtime UDP
+        spawns) it falls back to currently-active vehicles + this one.
+        """
         from .allocator import allocate
         res = allocate(spec.vehicle_id)
         name = f'vehicle_{spec.vehicle_id}'
         model_name = f'{spec.vehicle_type}_{spec.vehicle_id}'
-        roster = sorted(set(self._roster_fn()) | {model_name})
+        if roster is None:
+            roster = sorted(set(self._roster_fn()) | {model_name})
         x, y, z = position
         command = (
             'source /opt/ros/jazzy/setup.bash && '

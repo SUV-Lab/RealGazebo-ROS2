@@ -185,3 +185,14 @@ def test_docker_kill_stops_and_removes():
     _docker_backend(client).kill('cid-vehicle_2')
     assert client.calls == [('stop', 'cid-vehicle_2'),
                             ('remove', 'cid-vehicle_2')]
+
+
+def test_docker_launch_explicit_roster_overrides_actives():
+    """Boot-time fleets pass the full roster so every container gets it."""
+    client = FakeDockerClient()
+    spec = VehicleSpec(2, 'x500', '/px4', (0.0, 0.0, 0.0, 0.0))
+    _docker_backend(client).launch(
+        spec, 'c-track', (0, 0, 0), (0, 0, 0), 'h', 5005,
+        roster=['boat_9', 'x500_2', 'x500_3'])
+    cmd = client.created['vehicle_2']['Cmd'][2]
+    assert 'vehicle_models:=boat_9,x500_2,x500_3' in cmd

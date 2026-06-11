@@ -68,12 +68,13 @@ class ManagerNode(Node):
 
     # -- spawn core (one trigger-agnostic path) ---------------------------
     def _spawn_one(self, vehicle_type, vehicle_id, position, rpy,
-                   build_target_path, world):
+                   build_target_path, world, roster=None):
         """Spawn a single vehicle through the configured backend.
 
         Idempotent: a (type, id) already active is skipped. Called from both
         the boot-time YAML loop and the UDP listener thread, so the registry
-        mutation is guarded by a lock.
+        mutation is guarded by a lock. roster: complete vehicle_models list
+        for network_sim, known upfront for boot-time fleets.
         """
         with self._spawn_lock:
             if self.registry.is_active(vehicle_type, vehicle_id):
@@ -86,7 +87,8 @@ class ManagerNode(Node):
             handle = self.backend.launch(
                 spec, world, position, rpy,
                 self.get_parameter('unreal_ip').value,
-                self.get_parameter('unreal_port').value)
+                self.get_parameter('unreal_port').value,
+                roster=roster)
             record = self.registry.add(vehicle_type, vehicle_id)
             record.handle = handle
             self.get_logger().info(
@@ -101,10 +103,15 @@ class ManagerNode(Node):
             return
         with open(yaml_path) as f:
             config = yaml.safe_load(f)
-        for spec in parse_vehicles(config):
+        specs = parse_vehicles(config)
+        # The full fleet is known upfront, so every vehicle gets the complete
+        # network_sim roster (matches what generate_compose.py used to bake).
+        roster = sorted(f'{s.vehicle_type}_{s.vehicle_id}' for s in specs)
+        for spec in specs:
             x, y, z, yaw = spec.spawnpoint
             self._spawn_one(spec.vehicle_type, spec.vehicle_id, (x, y, z),
-                            (0.0, 0.0, yaw), spec.build_target_path, world)
+                            (0.0, 0.0, yaw), spec.build_target_path, world,
+                            roster=roster)
             time.sleep(SPAWN_STAGGER_SEC)
         self.get_logger().info(
             f"spawn complete: {[f'{t}_{i}' for t, i in self.registry.active_ids()]}")
@@ -182,6 +189,17 @@ class ManagerNode(Node):
         self._stop = True
         if self._sock is not None:
             self._sock.close()
+        # Tear down everything we spawned. Vehicles must not outlive the
+        # manager: PX4 runs in its own process group (or container), so a
+        # plain Ctrl+C would otherwise leave orphans behind.
+        world = self.get_parameter('world').value
+        for vehicle_type, vehicle_id in self.registry.active_ids():
+            try:
+                self._despawn_one(vehicle_type, vehicle_id, world)
+            except Exception as exc:
+                self.get_logger().warn(
+                    f"shutdown teardown failed for "
+                    f"{vehicle_type}_{vehicle_id}: {exc}")
 
 
 def main(args=None):
