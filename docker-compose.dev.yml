@@ -1,0 +1,32 @@
+# Development overlay: run the manager from the CURRENT working tree
+# instead of the baked image — mounts the repo and builds at startup
+# (no image rebuild needed while iterating).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  gazebo:
+    image: aware4docker/realgazebo:1.2
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev:/dev
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/ws
+    working_dir: /ws
+    command: >
+      bash -c "git config --global --add safe.directory '*' &&
+      source /opt/ros/jazzy/setup.bash &&
+      source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash &&
+      colcon --log-base /tmp/cl build --packages-select realgazebo
+      --build-base /tmp/cb --install-base /tmp/ci &&
+      source /tmp/ci/setup.bash &&
+      ros2 launch realgazebo manager_sim.launch.py
+      $${MANAGER_YAML:+yaml_path:=$$MANAGER_YAML}
+      headless:=${HEADLESS:-true} world:=${WORLD:-c-track}
+      px4_path:=/home/user/realgazebo/RealGazebo-PX4
+      unreal_ip:=${UNREAL_IP:-host.docker.internal}
+      unreal_port:=${UNREAL_PORT:-5005}
+      backend:=docker
+      mavlink_gcs_ip:=${MAVLINK_GCS_IP:-172.17.0.1}
+      docker_image:=${VEHICLE_IMAGE:-aware4docker/realgazebo:1.2.1}"

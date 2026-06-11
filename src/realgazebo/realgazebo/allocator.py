@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 
-# Per-vehicle resource formulas, mirrored 1:1 from scripts/generate_compose.py
-# (and docker-compose.yml network subnets). These are LOAD-BEARING:
+# Per-vehicle resource formulas, mirrored 1:1 from the retired
+# scripts/generate_compose.py (and docker-compose.yml network subnets).
+# These are LOAD-BEARING:
 # vehicle.launch.py independently derives its FastDDS interfaceWhiteList as
 # 172.30.0.{10+instance_id}, so a vehicle container must be attached to
 # vehicle-network at exactly the address computed here.

@@ -1,243 +1,136 @@
 #!/bin/bash
+# Start the RealGazebo multi-container simulation (manager-driven).
 #
-# Start RealGazebo Multi-Container Simulation
+# Brings up the gazebo container (Gazebo server + realgazebo manager) via
+# docker compose. Vehicles are created at runtime by UDP commands on :5006
+# (wire contract: src/realgazebo/realgazebo/protocol.py) and/or spawned at
+# boot from a vehicle YAML. Replaces the retired generate_compose.py flow.
 #
-# Usage:
-#   ./start_compose_simulation.sh [options] <config_file> [unreal_ip] [world_type]
+# Usage (positionals match the legacy script):
+#   ./scripts/start_compose_simulation.sh [options] [vehicle_yaml] [unreal_ip] [world]
+#
+# Arguments:
+#   [vehicle_yaml]   Host path to a vehicle YAML (same format as
+#                    src/realgazebo/yaml/example.yaml) to spawn at boot;
+#                    relative paths resolve against your current directory.
+#                    Omit to start with an empty world: vehicles are then
+#                    spawned at runtime over UDP only.
+#   [unreal_ip]      Same as --unreal-ip (legacy positional form)
+#   [world]          Same as --world (legacy positional form)
 #
 # Options:
-#   --gui           Enable Gazebo GUI (default: headless)
-#   --verbose       Enable verbose logging (level 4)
-#   --no-gpu        Disable GPU acceleration
-#   --unreal-ip IP  Unreal Engine server IP (default: host.docker.internal)
-#   --unreal-port P Unreal Engine server port (default: 5005)
-#   --world TYPE    World type: c-track, urban, vils (default: c-track)
-#   --follow        Follow logs after starting
-#
-# Examples:
-#   ./start_compose_simulation.sh config.yaml                                  # Config only (required)
-#   ./start_compose_simulation.sh config.yaml 10.255.70.74                     # Config + IP
-#   ./start_compose_simulation.sh config.yaml 10.255.70.74 urban               # Config + IP + world
-#   ./start_compose_simulation.sh --gui config.yaml                            # Options before config
-#   ./start_compose_simulation.sh --unreal-ip 10.0.0.1 --world urban config.yaml
-#
+#   --gui            Run Gazebo with GUI (default: headless; runs `xhost +local:`)
+#   --dev            Dev mode: mount the working tree and build at startup
+#   --unreal-ip IP   Unreal Engine host (default: host.docker.internal;
+#                    localhost/127.0.0.1 is rewritten automatically)
+#   --unreal-port P  Unreal Engine UDP port (default: 5005)
+#   --world W        World: c-track | urban | vils (default: c-track)
+#   --image IMG      Manager/vehicle image (default: aware4docker/realgazebo:1.2-manager)
+set -euo pipefail
+ORIG_PWD="$(pwd)"
+cd "$(dirname "$0")/.."
 
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-
-# Default values
-CONFIG_FILE=""
-HEADLESS=true
-VERBOSE=false
-USE_GPU=true
 UNREAL_IP="host.docker.internal"
-UNREAL_IP_SET=false
 UNREAL_PORT="5005"
-WORLD_TYPE="c-track"
-WORLD_TYPE_SET=false
-FOLLOW_LOGS=false
+WORLD="c-track"
+HEADLESS="true"
+IMAGE="aware4docker/realgazebo:1.2-manager"
+DEV_MODE=false
+DRY_RUN=false
+VEHICLE_YAML=""
+POS=0
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        --gui)
-            HEADLESS=false
-            echo "GUI mode enabled"
-            shift
-            ;;
-        --verbose|-v)
-            VERBOSE=true
-            echo "Verbose mode enabled"
-            shift
-            ;;
-        --no-gpu)
-            USE_GPU=false
-            echo "GPU disabled"
-            shift
-            ;;
-        --unreal-ip)
-            UNREAL_IP="$2"
-            UNREAL_IP_SET=true
-            echo "Unreal IP: $UNREAL_IP"
-            shift 2
-            ;;
-        --unreal-port)
-            UNREAL_PORT="$2"
-            echo "Unreal Port: $UNREAL_PORT"
-            shift 2
-            ;;
-        --world)
-            case $2 in
-                c-track|urban|vils)
-                    WORLD_TYPE="$2"
-                    WORLD_TYPE_SET=true
-                    echo "World type: $WORLD_TYPE"
-                    ;;
-                *)
-                    echo "Error: Invalid world type '$2'. Valid options: c-track, urban, vils"
-                    exit 1
-                    ;;
+    case "$1" in
+        --gui)         HEADLESS="false"; shift ;;
+        --dev)         DEV_MODE=true; shift ;;
+        --unreal-ip)   UNREAL_IP="$2"; shift 2 ;;
+        --unreal-port) UNREAL_PORT="$2"; shift 2 ;;
+        --world)       WORLD="$2"; shift 2 ;;
+        --image)       IMAGE="$2"; shift 2 ;;
+        --dry-run)     DRY_RUN=true; shift ;;
+        -h|--help)     grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -*)            echo "Unknown option: $1 (see --help)"; exit 1 ;;
+        *)  # legacy positional order: vehicle_yaml, unreal_ip, world
+            POS=$((POS + 1))
+            case $POS in
+                1) VEHICLE_YAML="$1" ;;
+                2) UNREAL_IP="$1" ;;
+                3) WORLD="$1" ;;
+                *) echo "Too many positional arguments: $1 (see --help)"; exit 1 ;;
             esac
-            shift 2
-            ;;
-        --follow|-f)
-            FOLLOW_LOGS=true
-            shift
-            ;;
-        --help|-h)
-            head -30 "$0" | tail -25
-            exit 0
-            ;;
-        *)
-            if [[ -z "$CONFIG_FILE" ]]; then
-                # First positional arg: config file
-                if [[ -f "$1" ]]; then
-                    CONFIG_FILE="$1"
-                elif [[ -f "${PROJECT_DIR}/$1" ]]; then
-                    CONFIG_FILE="${PROJECT_DIR}/$1"
-                else
-                    echo "Error: Config file not found: $1"
-                    exit 1
-                fi
-            elif [[ "$UNREAL_IP_SET" == "false" ]]; then
-                # Second positional arg: unreal IP
-                UNREAL_IP="$1"
-                UNREAL_IP_SET=true
-                echo "Unreal IP: $UNREAL_IP"
-            elif [[ "$WORLD_TYPE_SET" == "false" ]]; then
-                # Third positional arg: world type
-                case $1 in
-                    c-track|urban|vils)
-                        WORLD_TYPE="$1"
-                        WORLD_TYPE_SET=true
-                        echo "World type: $WORLD_TYPE"
-                        ;;
-                    *)
-                        echo "Error: Invalid world type '$1'. Valid options: c-track, urban, vils"
-                        exit 1
-                        ;;
-                esac
-            else
-                echo "Error: Unknown argument: $1"
-                exit 1
-            fi
-            shift
-            ;;
+            shift ;;
     esac
 done
 
-# Validate config file (required)
-if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: Config file is required"
-    echo "Usage: $0 [options] <config_file> [unreal_ip] [world_type]"
-    exit 1
+# Resolve a relative yaml path against the caller's directory (the script
+# itself runs from the repo root)
+if [[ -n "$VEHICLE_YAML" && "$VEHICLE_YAML" != /* ]]; then
+    VEHICLE_YAML="$ORIG_PWD/$VEHICLE_YAML"
 fi
 
-# Convert localhost to Docker-compatible host
-if [[ "$UNREAL_IP" == "127.0.0.1" ]] || [[ "$UNREAL_IP" == "localhost" ]]; then
-    echo "Note: Converting $UNREAL_IP → host.docker.internal (Docker compatibility)"
+# Docker cannot reach the host via loopback; rewrite to the host gateway alias
+if [[ "$UNREAL_IP" == "127.0.0.1" || "$UNREAL_IP" == "localhost" ]]; then
+    echo "Note: rewriting $UNREAL_IP -> host.docker.internal (Docker compatibility)"
     UNREAL_IP="host.docker.internal"
 fi
 
-echo "Using config: $CONFIG_FILE"
-
-# Allow X11 connections
-xhost + 2>/dev/null || true
-
-# Generate docker-compose.override.yml from config
-echo "Generating docker-compose configuration..."
-python3 "${SCRIPT_DIR}/generate_compose.py" "$CONFIG_FILE" \
-    --unreal-ip "$UNREAL_IP" \
-    --unreal-port "$UNREAL_PORT" \
-    --world "$WORLD_TYPE"
-
-# Set environment variables
-export LOCAL_USER_ID=$(id -u)
-export DISPLAY=${DISPLAY:-:0}
-export HEADLESS=$HEADLESS
-export VERBOSE=$VERBOSE
-export UNREAL_IP=$UNREAL_IP
-export UNREAL_PORT=$UNREAL_PORT
-export WORLD=$WORLD_TYPE
-
-# Get Docker host gateway IP for MAVLink GCS connection
-DOCKER_HOST_IP=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null)
-if [ -z "$DOCKER_HOST_IP" ]; then
-    DOCKER_HOST_IP=$(ip route | grep docker0 | awk '{print $9}' 2>/dev/null)
-fi
-if [ -z "$DOCKER_HOST_IP" ]; then
-    DOCKER_HOST_IP="172.17.0.1"
-    echo "Warning: Could not detect Docker host IP, using default $DOCKER_HOST_IP"
-fi
-export MAVLINK_GCS_IP=$DOCKER_HOST_IP
+# Auto-detect the GCS (QGC on this host) address from the default docker
+# bridge gateway, like the legacy flow did; fall back to the usual default.
+MAVLINK_GCS_IP=$(docker network inspect bridge \
+    --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)
+MAVLINK_GCS_IP="${MAVLINK_GCS_IP:-172.17.0.1}"
 echo "MAVLink GCS IP: $MAVLINK_GCS_IP"
 
-# Check for host PX4 path and set if available
-if [[ -d "/home/kmk/ws/realgazebo/RealGazebo-PX4" ]]; then
-    export PX4_PATH="/home/kmk/ws/realgazebo/RealGazebo-PX4"
-fi
-
-# GPU configuration
-COMPOSE_PROFILES=""
-if [[ "$USE_GPU" == "true" ]] && command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
-    if docker info 2>/dev/null | grep -q nvidia; then
-        echo "NVIDIA GPU detected and enabled"
-        # Note: GPU support requires nvidia-docker runtime
-        # Add to docker-compose.yml if needed
-    else
-        echo "Warning: nvidia-docker not available, running without GPU"
-    fi
+# Vehicle YAML: copy into ./config (mounted read-only at /config in the container)
+MANAGER_YAML=""
+if [[ -n "$VEHICLE_YAML" ]]; then
+    [[ -f "$VEHICLE_YAML" ]] || { echo "Vehicle yaml not found: $VEHICLE_YAML"; exit 1; }
+    mkdir -p config
+    cp "$VEHICLE_YAML" config/vehicles.yaml
+    MANAGER_YAML="/config/vehicles.yaml"
+    echo "Boot vehicles from: $VEHICLE_YAML"
 else
-    echo "Running without GPU acceleration"
+    echo "No vehicle YAML given: empty world, vehicles spawn at runtime via UDP :5006"
 fi
 
-# Start containers
-cd "$PROJECT_DIR"
-echo ""
-echo "Starting simulation..."
-echo "========================================"
-
-docker compose down --remove-orphans 2>/dev/null || true
-docker compose up -d
-
-echo ""
-echo "Containers started. Waiting for Gazebo to be ready..."
-echo "(This may take 30-60 seconds for map loading)"
-
-# Wait for gazebo to be healthy
-MAX_WAIT=120
-WAIT_TIME=0
-while [[ $WAIT_TIME -lt $MAX_WAIT ]]; do
-    STATUS=$(docker inspect --format='{{.State.Health.Status}}' gazebo 2>/dev/null || echo "unknown")
-    if [[ "$STATUS" == "healthy" ]]; then
-        echo ""
-        echo "Gazebo is ready!"
-        break
+COMPOSE=(docker compose -f docker-compose.yml)
+if $DEV_MODE; then
+    COMPOSE+=(-f docker-compose.dev.yml)
+    echo "Mode: dev (working tree mounted, builds at startup)"
+else
+    if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+        echo "Image $IMAGE not found. Build it once with:"
+        echo "  docker build -f docker/Dockerfile.update -t $IMAGE ."
+        exit 1
     fi
-    echo -n "."
-    sleep 5
-    WAIT_TIME=$((WAIT_TIME + 5))
+    echo "Mode: baked image ($IMAGE)"
+fi
+
+if [[ "$HEADLESS" == "false" ]]; then
+    xhost +local: >/dev/null 2>&1 || echo "Warning: xhost failed (no X server?)"
+fi
+
+export DISPLAY="${DISPLAY:-:0}" HEADLESS WORLD UNREAL_IP UNREAL_PORT \
+       MAVLINK_GCS_IP MANAGER_YAML MANAGER_IMAGE="$IMAGE" VEHICLE_IMAGE="$IMAGE"
+
+if $DRY_RUN; then
+    echo "[dry-run] HEADLESS=$HEADLESS WORLD=$WORLD UNREAL_IP=$UNREAL_IP:$UNREAL_PORT"
+    echo "[dry-run] MANAGER_YAML=${MANAGER_YAML:-<none>} IMAGE=$IMAGE DEV=$DEV_MODE"
+    exit 0
+fi
+
+"${COMPOSE[@]}" down --timeout 15 >/dev/null 2>&1 || true
+"${COMPOSE[@]}" up -d
+
+echo -n "Waiting for the manager"
+for _ in $(seq 1 90); do
+    if docker logs gazebo 2>&1 | grep -qa "listening for UDP"; then
+        echo; echo "Ready: manager is listening for spawn/despawn commands on UDP :5006"
+        echo "(wire contract: src/realgazebo/realgazebo/protocol.py)"
+        exit 0
+    fi
+    echo -n "."; sleep 2
 done
-
-if [[ "$STATUS" != "healthy" ]]; then
-    echo ""
-    echo "Warning: Gazebo may not be fully ready (status: $STATUS)"
-fi
-
-echo ""
-echo "========================================"
-echo "Simulation is running!"
-echo ""
-echo "Useful commands:"
-echo "  docker compose logs -f           # View all logs"
-echo "  docker compose logs -f gazebo    # View Gazebo logs"
-echo "  docker compose logs -f vehicle_0 # View vehicle_0 logs"
-echo "  docker compose ps                # List containers"
-echo "  ./scripts/stop_compose_simulation.sh     # Stop simulation"
-echo ""
-
-if [[ "$FOLLOW_LOGS" == "true" ]]; then
-    docker compose logs -f
-fi
+echo; echo "Manager did not come up in time; check: docker logs gazebo"
+exit 1

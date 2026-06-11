@@ -33,6 +33,12 @@ def generate_launch_description():
             'backend', default_value='subprocess',
             description='How vehicles are materialized: subprocess '
                         '(monolithic) or docker (one container per vehicle)'),
+        DeclareLaunchArgument(
+            'docker_image', default_value='aware4docker/realgazebo:1.2',
+            description='Image for runtime vehicle containers (docker backend)'),
+        DeclareLaunchArgument(
+            'mavlink_gcs_ip', default_value='172.17.0.1',
+            description='GCS (QGC) address injected into vehicle containers'),
     ]
 
     # Pin GZ transport to localhost for the monolithic run (matches legacy).
@@ -76,6 +82,8 @@ def generate_launch_description():
             'unreal_port': ParameterValue(
                 LaunchConfiguration('unreal_port'), value_type=int),
             'backend': LaunchConfiguration('backend'),
+            'docker_image': LaunchConfiguration('docker_image'),
+            'mavlink_gcs_ip': LaunchConfiguration('mavlink_gcs_ip'),
             'default_px4_path': LaunchConfiguration('px4_path'),
         }])
 

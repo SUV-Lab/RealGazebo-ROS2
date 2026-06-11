@@ -1,59 +1,19 @@
 #!/bin/bash
+# Stop the RealGazebo multi-container simulation and clean up.
 #
-# Stop RealGazebo Multi-Container Simulation
-#
-# Usage:
-#   ./stop_compose_simulation.sh [options]
-#
-# Options:
-#   --volumes, -v   Also remove volumes (clears generated models)
-#   --all, -a       Remove all containers, networks, and volumes
-#
+# `docker compose down` stops the gazebo/manager container (the manager's
+# shutdown teardown despawns its vehicles first). Any vehicle containers
+# left over from an unclean exit are removed as well.
+set -uo pipefail
+cd "$(dirname "$0")/.."
 
-set -e
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down --timeout 20 2>/dev/null \
+    || docker compose down --timeout 20
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-
-REMOVE_VOLUMES=false
-REMOVE_ALL=false
-
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --volumes|-v)
-            REMOVE_VOLUMES=true
-            shift
-            ;;
-        --all|-a)
-            REMOVE_ALL=true
-            shift
-            ;;
-        --help|-h)
-            head -15 "$0" | tail -12
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-    esac
-done
-
-cd "$PROJECT_DIR"
-
-echo "Stopping RealGazebo simulation..."
-
-if [[ "$REMOVE_ALL" == "true" ]]; then
-    echo "Removing all containers, networks, and volumes..."
-    docker compose down -v --remove-orphans
-elif [[ "$REMOVE_VOLUMES" == "true" ]]; then
-    echo "Removing containers and volumes..."
-    docker compose down -v
-else
-    echo "Stopping containers..."
-    docker compose down --remove-orphans
+# Sweep stray vehicle containers (e.g. after a SIGKILLed manager)
+STRAY=$(docker ps -a --format '{{.Names}}' | grep -E '^vehicle_[0-9]+$' || true)
+if [[ -n "$STRAY" ]]; then
+    echo "Removing stray vehicle containers: $STRAY"
+    echo "$STRAY" | xargs docker rm -f >/dev/null
 fi
-
-echo ""
 echo "Simulation stopped."

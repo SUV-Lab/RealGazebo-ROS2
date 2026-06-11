@@ -1,43 +1,45 @@
-# RealGazebo Multi-Container Setup
+# RealGazebo Multi-Container Simulation
 #
-# Usage:
-#   1. Generate vehicle configuration: python3 scripts/generate_compose.py config/vehicles.yaml
-#   2. Start simulation: docker-compose up -d
-#   3. Stop simulation: docker-compose down
+# One service: the gazebo container runs the Gazebo server AND the
+# realgazebo manager. Vehicles are created at runtime as sibling
+# containers (one per vehicle), driven by UDP spawn commands and/or a
+# boot YAML — the manager replaced the retired generate_compose flow.
 #
-# Or use the helper scripts:
-#   ./scripts/start_compose_simulation.sh config/vehicles.yaml [--gui] [--no-gpu]
-#   ./scripts/stop_compose_simulation.sh
+# One-time image build (bakes the current workspace, see docker/Dockerfile.update):
+#   docker build -f docker/Dockerfile.update -t aware4docker/realgazebo:1.2-manager .
+#
+# Usage (or use scripts/start_compose_simulation.sh / stop_compose_simulation.sh):
+#   docker compose up -d
+#   MANAGER_YAML=<container path to yaml> docker compose up -d    # boot vehicles from YAML
+#   docker compose down
+# Runtime spawn/despawn = UDP packets on :5006; wire contract in
+# src/realgazebo/realgazebo/protocol.py (the UE plugin is the real sender).
+#
+# Development (mounts the working tree and builds at startup instead of
+# using the baked image):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 networks:
+  # Fixed names (no compose project prefix) so the manager can attach
+  # runtime vehicle containers by the same names it was configured with.
   gazebo-network:
+    name: gazebo-network
     driver: bridge
     ipam:
       config:
         - subnet: 172.20.0.0/16
   vehicle-network:
+    name: vehicle-network
     driver: bridge
-    internal: true  # 외부 접근 차단, 드론간 통신만
+    internal: true  # no external access; isolated per-vehicle DDS
     ipam:
       config:
         - subnet: 172.30.0.0/16
 
-x-common-env: &common-env
-  DISPLAY: ${DISPLAY:-:0}
-  QT_X11_NO_MITSHM: 1
-
-x-common-volumes: &common-volumes
-  - /tmp/.X11-unix:/tmp/.X11-unix
-  - ${PX4_PATH:-/home/user/realgazebo/RealGazebo-PX4}:/home/user/realgazebo/RealGazebo-PX4:ro
-
-x-gpu-env: &gpu-env
-  NVIDIA_VISIBLE_DEVICES: all
-  NVIDIA_DRIVER_CAPABILITIES: all
-
 services:
-  # Gazebo Simulator Container
+  # Gazebo server + realgazebo manager
   gazebo:
-    image: aware4docker/realgazebo:1.2
+    image: ${MANAGER_IMAGE:-aware4docker/realgazebo:1.2-manager}
     container_name: gazebo
     hostname: gazebo
     privileged: true
@@ -49,13 +51,25 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: all
       GZ_IP: 172.20.0.2
       GZ_PARTITION: realgazebo
-      LOCAL_USER_ID: ${LOCAL_USER_ID:-1000}
+      # empty = skip the entrypoint usermod walk over the baked home dir
+      # (minutes of delay); the manager + gz server run as root
+      LOCAL_USER_ID: ""
+      MANAGER_YAML: ${MANAGER_YAML:-}
+    ports:
+      - "5006:5006/udp"   # UE / host -> manager spawn & despawn commands
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - /dev:/dev
+      - /var/run/docker.sock:/var/run/docker.sock   # sibling-container control
+      - ./config:/config:ro   # host-provided vehicle yamls (MANAGER_YAML=/config/...)
     networks:
       gazebo-network:
         ipv4_address: 172.20.0.2
+      # Also on vehicle-network: compose only creates networks referenced
+      # by started services, and vehicles are not compose services.
+      # Vehicles sit at .10+, so .2 is free.
+      vehicle-network:
+        ipv4_address: 172.30.0.2
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -64,7 +78,18 @@ services:
       timeout: 10s
       retries: 30
       start_period: 60s
-    command: bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo gazebo.launch.py headless:=${HEADLESS:-true} verbose:=${VERBOSE:-false} world:=${WORLD:-c-track} px4_path:=/home/user/realgazebo/RealGazebo-PX4 unreal_ip:=${UNREAL_IP:-host.docker.internal} unreal_port:=${UNREAL_PORT:-5005}"
+    command: >
+      bash -c "source /opt/ros/jazzy/setup.bash &&
+      source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash &&
+      ros2 launch realgazebo manager_sim.launch.py
+      $${MANAGER_YAML:+yaml_path:=$$MANAGER_YAML}
+      headless:=${HEADLESS:-true} world:=${WORLD:-c-track}
+      px4_path:=/home/user/realgazebo/RealGazebo-PX4
+      unreal_ip:=${UNREAL_IP:-host.docker.internal}
+      unreal_port:=${UNREAL_PORT:-5005}
+      backend:=docker
+      mavlink_gcs_ip:=${MAVLINK_GCS_IP:-172.17.0.1}
+      docker_image:=${VEHICLE_IMAGE:-aware4docker/realgazebo:1.2-manager}"
     deploy:
       resources:
         limits:
@@ -74,29 +99,3 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-
-  # Vehicle Template - Extended by generated vehicle services
-  # This service is not started directly, only used as a template
-  vehicle_template:
-    image: aware4docker/realgazebo:1.2
-    profiles:
-      - template  # Never started directly
-    privileged: true
-    environment:
-      <<: *common-env
-      PX4_GZ_STANDALONE: 1
-      LOCAL_USER_ID: ${LOCAL_USER_ID:-1000}
-    volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - ${PX4_PATH:-/home/user/realgazebo/RealGazebo-PX4}:/home/user/realgazebo/RealGazebo-PX4:ro
-      - gazebo-models:/tmp/models
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      gazebo:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-
