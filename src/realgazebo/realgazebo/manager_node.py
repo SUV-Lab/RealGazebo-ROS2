@@ -16,7 +16,7 @@ from .spawn_core import (
     build_remove_argv)
 from .registry import VehicleRegistry
 from .protocol import parse_packet, DespawnCommand
-from .vehicle_codes import type_for_code
+from .vehicle_codes import scan_vehicle_codes, type_for_code
 from .geometry import quat_to_euler
 
 # PX4 params applied right after spawn (same as legacy realgazebo.launch.py)
@@ -124,6 +124,10 @@ class ManagerNode(Node):
 
     # -- runtime UDP trigger ----------------------------------------------
     def start_udp_listener(self):
+        # code->type map scanned from the model templates (single source of
+        # truth shared with the gz plugin's <vehicle_code> SDF element)
+        self._code_map = scan_vehicle_codes()
+        self.get_logger().info(f"vehicle codes: {self._code_map}")
         port = self.get_parameter('spawn_udp_port').value
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -150,7 +154,7 @@ class ManagerNode(Node):
             if cmd is None:
                 continue  # not a spawn/despawn command
             try:
-                vehicle_type = type_for_code(cmd.vehicle_code)
+                vehicle_type = type_for_code(cmd.vehicle_code, self._code_map)
             except ValueError as exc:
                 self.get_logger().warn(str(exc))
                 continue

@@ -46,8 +46,9 @@ GZ_ADD_PLUGIN(
 	RealGazebo::ISystemPostUpdate
 )
 
-RealGazebo::RealGazebo() : 
+RealGazebo::RealGazebo() :
 	vehicle_num_(0),
+	vehicle_code_(255),
 	sock_unreal_(-1),
 	num_motor_joint_(0),
 	num_moveable_link_(0),
@@ -120,7 +121,16 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 	} else {
 		unreal_port_ = 5555;
 	}
-	
+
+	// Wire vehicle code: prefer the SDF declaration so adding a new vehicle
+	// type does not require recompiling this plugin; fall back to the legacy
+	// hardcoded map for SDFs that do not declare one.
+	if (_sdf->HasElement("vehicle_code")) {
+		vehicle_code_ = static_cast<uint8_t>(_sdf->Get<int>("vehicle_code"));
+	} else {
+		vehicle_code_ = getVehicleCode(vehicle_type_);
+	}
+
 	setupSendSocket(sock_unreal_, addr_unreal_, unreal_port_);
 	
 	int idx = 0;
@@ -236,7 +246,7 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 		
 		RealGazeboPacketHeader* pose_header = reinterpret_cast<RealGazeboPacketHeader*>(pose_buffer.data());
 		pose_header->vehicle_num = vehicle_num_;
-		pose_header->vehicle_code = getVehicleCode(vehicle_type_);
+		pose_header->vehicle_code = vehicle_code_;
 		pose_header->data_type = 1;
 		
 		float pose_values[7] = {
@@ -255,7 +265,7 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 			
 			RealGazeboPacketHeader* rpm_header = reinterpret_cast<RealGazeboPacketHeader*>(rpm_buffer.data());
 			rpm_header->vehicle_num = vehicle_num_;
-			rpm_header->vehicle_code = getVehicleCode(vehicle_type_);
+			rpm_header->vehicle_code = vehicle_code_;
 			rpm_header->data_type = 2;
 			
 			float* rpm_data_ptr = reinterpret_cast<float*>(rpm_buffer.data() + sizeof(RealGazeboPacketHeader));
@@ -279,7 +289,7 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 			
 			RealGazeboPacketHeader* moveable_header = reinterpret_cast<RealGazeboPacketHeader*>(moveable_buffer.data());
 			moveable_header->vehicle_num = vehicle_num_;
-			moveable_header->vehicle_code = getVehicleCode(vehicle_type_);
+			moveable_header->vehicle_code = vehicle_code_;
 			moveable_header->data_type = 3;
 			
 			float* moveable_data_ptr = reinterpret_cast<float*>(moveable_buffer.data() + sizeof(RealGazeboPacketHeader));
@@ -324,7 +334,7 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 
 			RealGazeboPacketHeader* additional_header = reinterpret_cast<RealGazeboPacketHeader*>(additional_buffer.data());
 			additional_header->vehicle_num = vehicle_num_;
-			additional_header->vehicle_code = getVehicleCode(vehicle_type_);
+			additional_header->vehicle_code = vehicle_code_;
 			additional_header->data_type = 5;
 
 			std::memcpy(additional_buffer.data() + sizeof(RealGazeboPacketHeader), &battery_remaining, sizeof(float));
@@ -388,7 +398,7 @@ void RealGazebo::sendResetMessage()
 
 	RealGazeboPacketHeader* header = reinterpret_cast<RealGazeboPacketHeader*>(buffer.data());
 	header->vehicle_num = vehicle_num_;
-	header->vehicle_code = getVehicleCode(vehicle_type_);
+	header->vehicle_code = vehicle_code_;
 	header->data_type = 4;
 
 	sendto(sock_unreal_, buffer.data(), payload_size, 0,

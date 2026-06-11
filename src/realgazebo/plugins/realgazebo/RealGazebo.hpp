@@ -119,6 +119,7 @@ private:
 	
 	std::string vehicle_type_;
 	uint8_t vehicle_num_;
+	uint8_t vehicle_code_;
 	
 	std::string unreal_ip_;
 	int unreal_port_;

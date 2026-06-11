@@ -1,9 +1,10 @@
-# Canonical wire vehicle_code -> type map.
-# MUST stay in sync with the gz plugin getVehicleCode() in
-# src/realgazebo/plugins/realgazebo/RealGazebo.cpp and the UE
-# FBridgeVehicleConfigRow DataTable. (code 0 covers both x500 and
-# x500_lidar_2d on the sender side; the reverse maps to the base x500.)
-CODE_TO_TYPE = {
+import os
+import re
+from glob import glob
+
+# Legacy fallback map, mirroring the gz plugin's getVehicleCode() if-chain.
+# Used only when no template declares a <vehicle_code> (old checkouts).
+LEGACY_CODE_TO_TYPE = {
     0: 'x500',
     1: 'rover_ackermann',
     2: 'boat',
@@ -12,9 +13,41 @@ CODE_TO_TYPE = {
     201: 'rock',
 }
 
+_CODE_RE = re.compile(r'<vehicle_code>\s*(\d+)\s*</vehicle_code>')
 
-def type_for_code(code: int) -> str:
+
+def scan_vehicle_codes(models_dir=None) -> dict:
+    """Build the code->type map by scanning <vehicle_code> in *.sdf.jinja.
+
+    The model template is the single source of truth: the gz plugin reads the
+    same element at runtime, so adding a vehicle type needs no code changes
+    on either side. The type name is the template filename stem. When two
+    templates share a code (x500 / x500_lidar_2d both send 0), the shortest
+    name wins — the base type is what a spawn request should produce.
+    Falls back to LEGACY_CODE_TO_TYPE when no template declares a code.
+    """
+    if models_dir is None:
+        # lazy import so this module imports/unit-tests on a host without ROS
+        from ament_index_python.packages import get_package_share_directory
+        models_dir = os.path.join(get_package_share_directory('realgazebo'), 'models')
+    mapping = {}
+    pattern = os.path.join(models_dir, '**', '*.sdf.jinja')
+    for path in sorted(glob(pattern, recursive=True)):
+        with open(path) as f:
+            match = _CODE_RE.search(f.read())
+        if not match:
+            continue
+        code = int(match.group(1))
+        name = os.path.basename(path)[:-len('.sdf.jinja')]
+        if code not in mapping or len(name) < len(mapping[code]):
+            mapping[code] = name
+    return mapping or dict(LEGACY_CODE_TO_TYPE)
+
+
+def type_for_code(code: int, mapping=None) -> str:
     """Map a wire vehicle_code to a vehicle type string; raise on unknown."""
-    if code not in CODE_TO_TYPE:
+    if mapping is None:
+        mapping = LEGACY_CODE_TO_TYPE
+    if code not in mapping:
         raise ValueError(f"unknown vehicle_code {code}")
-    return CODE_TO_TYPE[code]
+    return mapping[code]
