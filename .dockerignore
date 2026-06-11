@@ -1,4 +1,4 @@
-# Context for docker/Dockerfile.update (COPY of the local working tree).
+# Context for docker/Dockerfile.dev (COPY of the local working tree).
 # Keep .git: the realgazebo CMakeLists derives the asset-download version
 # from `git describe`.
 build/

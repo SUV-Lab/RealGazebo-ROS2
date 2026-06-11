@@ -25,7 +25,7 @@
 #                    localhost/127.0.0.1 is rewritten automatically)
 #   --unreal-port P  Unreal Engine UDP port (default: 5005)
 #   --world W        World: c-track | urban | vils (default: c-track)
-#   --image IMG      Manager/vehicle image (default: aware4docker/realgazebo:1.2-manager)
+#   --image IMG      Manager/vehicle image (default: mdeagewt/realgazebo:ue5.7)
 set -euo pipefail
 ORIG_PWD="$(pwd)"
 cd "$(dirname "$0")/.."
@@ -34,7 +34,7 @@ UNREAL_IP="host.docker.internal"
 UNREAL_PORT="5005"
 WORLD="c-track"
 HEADLESS="true"
-IMAGE="aware4docker/realgazebo:1.2-manager"
+IMAGE="mdeagewt/realgazebo:ue5.7"
 DEV_MODE=false
 DRY_RUN=false
 VEHICLE_YAML=""
@@ -100,9 +100,8 @@ if $DEV_MODE; then
     echo "Mode: dev (working tree mounted, builds at startup)"
 else
     if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-        echo "Image $IMAGE not found. Build it once with:"
-        echo "  docker build -f docker/Dockerfile.update -t $IMAGE ."
-        exit 1
+        echo "Image $IMAGE not found locally; docker compose will pull it."
+        echo "(To bake local changes: docker build -f docker/Dockerfile.dev -t $IMAGE .)"
     fi
     echo "Mode: baked image ($IMAGE)"
 fi

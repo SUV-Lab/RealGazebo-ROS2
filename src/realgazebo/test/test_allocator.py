@@ -3,7 +3,7 @@ from realgazebo.allocator import allocate, MAX_VEHICLE_ID
 
 
 def test_allocate_golden_vehicle_0():
-    """Golden values copied from generate_compose.py / docker-compose.override.yml."""
+    """Golden values copied from the retired generate_compose.py / docker-compose.override.yml flow."""
     r = allocate(0)
     assert r.gz_ip == '172.20.0.10'
     assert r.vehicle_ip == '172.30.0.10'

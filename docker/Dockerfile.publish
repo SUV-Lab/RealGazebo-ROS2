@@ -1,0 +1,24 @@
+# Release bake: build RealGazebo-ROS2 from a PUSHED git ref on top of the
+# dependency base image (PX4 and all system deps stay baked), so the
+# published image corresponds exactly to a branch/tag on GitHub.
+#
+# Build & publish:
+#   docker build -f docker/Dockerfile.publish --no-cache \
+#       --build-arg ROS2_REF=ue5.7 -t mdeagewt/realgazebo:ue5.7 docker/
+#   docker push mdeagewt/realgazebo:ue5.7
+ARG BASE_IMAGE=aware4docker/realgazebo:1.2
+FROM ${BASE_IMAGE}
+ARG ROS2_REF=ue5.7
+
+USER user
+# Replace the baked checkout entirely (stale build/install of removed
+# packages must not survive a release bake) and build clean.
+RUN rm -rf /home/user/realgazebo/RealGazebo-ROS2 \
+    && git clone --branch "${ROS2_REF}" --recursive \
+        https://github.com/SUV-Lab/RealGazebo-ROS2.git \
+        /home/user/realgazebo/RealGazebo-ROS2 \
+    && cd /home/user/realgazebo/RealGazebo-ROS2 \
+    && . /opt/ros/jazzy/setup.sh \
+    && colcon build --symlink-install
+
+USER root

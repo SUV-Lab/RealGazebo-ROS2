@@ -5,8 +5,9 @@
 # containers (one per vehicle), driven by UDP spawn commands and/or a
 # boot YAML — the manager replaced the retired generate_compose flow.
 #
-# One-time image build (bakes the current workspace, see docker/Dockerfile.update):
-#   docker build -f docker/Dockerfile.update -t aware4docker/realgazebo:1.2-manager .
+# Image: pulled from Docker Hub (mdeagewt/realgazebo:ue5.7). To run local
+# changes instead, bake the working tree over it (see docker/Dockerfile.dev):
+#   docker build -f docker/Dockerfile.dev -t mdeagewt/realgazebo:ue5.7 .
 #
 # Usage (or use scripts/start_compose_simulation.sh / stop_compose_simulation.sh):
 #   docker compose up -d
@@ -39,7 +40,7 @@ networks:
 services:
   # Gazebo server + realgazebo manager
   gazebo:
-    image: ${MANAGER_IMAGE:-aware4docker/realgazebo:1.2-manager}
+    image: ${MANAGER_IMAGE:-mdeagewt/realgazebo:ue5.7}
     container_name: gazebo
     hostname: gazebo
     privileged: true
@@ -96,7 +97,7 @@ services:
       unreal_port:=${UNREAL_PORT:-5005}
       backend:=docker
       mavlink_gcs_ip:=${MAVLINK_GCS_IP:-172.17.0.1}
-      docker_image:=${VEHICLE_IMAGE:-aware4docker/realgazebo:1.2-manager}"
+      docker_image:=${VEHICLE_IMAGE:-mdeagewt/realgazebo:ue5.7}"
     deploy:
       resources:
         limits:

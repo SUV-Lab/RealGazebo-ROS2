@@ -142,7 +142,7 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -d -it --privileged \
     -v /dev:/dev:rw \
     --hostname $(hostname) \
     --network host \
-    --name "$container_name" aware4docker/realgazebo:1.2
+    --name "$container_name" mdeagewt/realgazebo:ue5.7
 
 docker cp "$CONFIG_FILE" "$container_name":/home/user/
 

@@ -200,7 +200,7 @@ WORKDIR /home/user/realgazebo
 
 #ARG CACHEBUST=1
 RUN git clone --branch v1.16.0-1.2.0 https://github.com/SUV-Lab/RealGazebo-PX4.git --recursive \
-    && git clone --branch v1.2 https://github.com/SUV-Lab/RealGazebo-ROS2.git --recursive
+    && git clone --branch ue5.7 https://github.com/SUV-Lab/RealGazebo-ROS2.git --recursive
 
 RUN cd /home/user/realgazebo/RealGazebo-PX4 && ./Tools/setup/ubuntu.sh --no-nuttx
 

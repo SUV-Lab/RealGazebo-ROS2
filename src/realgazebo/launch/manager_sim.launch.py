@@ -34,7 +34,7 @@ def generate_launch_description():
             description='How vehicles are materialized: subprocess '
                         '(monolithic) or docker (one container per vehicle)'),
         DeclareLaunchArgument(
-            'docker_image', default_value='aware4docker/realgazebo:1.2',
+            'docker_image', default_value='mdeagewt/realgazebo:ue5.7',
             description='Image for runtime vehicle containers (docker backend)'),
         DeclareLaunchArgument(
             'mavlink_gcs_ip', default_value='172.17.0.1',
