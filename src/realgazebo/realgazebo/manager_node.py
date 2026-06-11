@@ -1,6 +1,4 @@
-import os
 import time
-import signal
 import socket
 import threading
 import subprocess
@@ -11,22 +9,14 @@ from rclpy.node import Node
 from rosgraph_msgs.msg import Clock
 
 from .yaml_config import parse_vehicles, VehicleSpec
-from .spawn_core import (
-    render_sdf, build_create_argv, build_px4_command, build_param_argv,
-    build_remove_argv)
+from .spawn_core import build_remove_argv
+from .backends import make_backend
 from .registry import VehicleRegistry
 from .protocol import parse_packet, DespawnCommand
 from .vehicle_codes import scan_vehicle_codes, type_for_code
 from .geometry import quat_to_euler
 
-# PX4 params applied right after spawn (same as legacy realgazebo.launch.py)
-POST_SPAWN_PARAMS = [
-    ('NAV_DLL_ACT', 0),
-    ('COM_RCL_EXCEPT', 31),
-    ('COM_RC_IN_MODE', 4),
-]
 SPAWN_STAGGER_SEC = 0.5
-PARAM_APPLY_DELAY_SEC = 8.0
 
 
 class ManagerNode(Node):
@@ -39,7 +29,24 @@ class ManagerNode(Node):
         self.declare_parameter('spawn_udp_port', 5006)
         self.declare_parameter(
             'default_px4_path', '/home/user/realgazebo/RealGazebo-PX4')
+        # execution backend: how a spawned vehicle is materialized
+        # ('subprocess' = monolithic mode, 'docker' = one container per vehicle)
+        self.declare_parameter('backend', 'subprocess')
+        self.declare_parameter('docker_image', 'aware4docker/realgazebo:1.2')
+        self.declare_parameter('docker_gazebo_network', 'gazebo-network')
+        self.declare_parameter('docker_vehicle_network', 'vehicle-network')
+        self.declare_parameter('mavlink_gcs_ip', '172.17.0.1')
         self.registry = VehicleRegistry()
+        self.backend = make_backend(
+            self.get_parameter('backend').value,
+            image=self.get_parameter('docker_image').value,
+            px4_path=self.get_parameter('default_px4_path').value,
+            gazebo_network=self.get_parameter('docker_gazebo_network').value,
+            vehicle_network=self.get_parameter('docker_vehicle_network').value,
+            mavlink_gcs_ip=self.get_parameter('mavlink_gcs_ip').value,
+            roster_fn=lambda: [
+                f'{t}_{i}' for t, i in self.registry.active_ids()],
+        )
         self._spawn_lock = threading.Lock()
         self._clock_seen = False
         self._stop = False
@@ -62,7 +69,7 @@ class ManagerNode(Node):
     # -- spawn core (one trigger-agnostic path) ---------------------------
     def _spawn_one(self, vehicle_type, vehicle_id, position, rpy,
                    build_target_path, world):
-        """Spawn a single vehicle: render SDF, create the gz entity, launch PX4.
+        """Spawn a single vehicle through the configured backend.
 
         Idempotent: a (type, id) already active is skipped. Called from both
         the boot-time YAML loop and the UDP listener thread, so the registry
@@ -73,38 +80,18 @@ class ManagerNode(Node):
                 self.get_logger().warn(
                     f"skip duplicate {vehicle_type}_{vehicle_id}")
                 return
-            unreal_ip = self.get_parameter('unreal_ip').value
-            unreal_port = self.get_parameter('unreal_port').value
-            sdf_path = render_sdf(vehicle_type, unreal_ip, unreal_port)
-            subprocess.run(
-                build_create_argv(vehicle_type, vehicle_id, sdf_path,
-                                  world, position, rpy),
-                check=True)
             spec = VehicleSpec(
                 vehicle_id, vehicle_type, build_target_path,
                 (position[0], position[1], position[2], rpy[2]))
-            argv, px4_env, px4_cwd = build_px4_command(spec, world)
-            # start_new_session so PX4 + any children get their own process
-            # group, which despawn can kill as a unit (no orphans).
-            proc = subprocess.Popen(
-                argv, env={**os.environ, **px4_env}, cwd=px4_cwd,
-                start_new_session=True)
+            handle = self.backend.launch(
+                spec, world, position, rpy,
+                self.get_parameter('unreal_ip').value,
+                self.get_parameter('unreal_port').value)
             record = self.registry.add(vehicle_type, vehicle_id)
-            record.process = proc
+            record.handle = handle
             self.get_logger().info(
-                f"spawned {vehicle_type}_{vehicle_id} (px4 pid {proc.pid})")
-        threading.Thread(
-            target=self._apply_params_later, args=(spec,), daemon=True).start()
-
-    def _apply_params_later(self, spec, delay=PARAM_APPLY_DELAY_SEC):
-        """Best-effort: set PX4 params once the instance has had time to boot."""
-        time.sleep(delay)
-        for name, value in POST_SPAWN_PARAMS:
-            try:
-                subprocess.run(
-                    build_param_argv(spec, name, value), check=False, timeout=15)
-            except Exception:
-                pass
+                f"spawned {vehicle_type}_{vehicle_id} "
+                f"(handle {getattr(handle, 'pid', handle)})")
 
     # -- boot-time YAML trigger -------------------------------------------
     def spawn_all(self):
@@ -176,25 +163,16 @@ class ManagerNode(Node):
                 self.get_logger().error(f"spawn failed: {exc}")
 
     def _despawn_one(self, vehicle_type, vehicle_id, world):
-        """Kill the vehicle's PX4 process and remove its gz model entity."""
+        """Tear down the vehicle via the backend and remove its gz model."""
         with self._spawn_lock:
             if not self.registry.is_active(vehicle_type, vehicle_id):
                 self.get_logger().warn(
                     f"despawn: {vehicle_type}_{vehicle_id} not active")
                 return
             record = self.registry.remove(vehicle_type, vehicle_id)
-        if record.process is not None:
-            # PX4 may fork children; kill the whole process group so nothing
-            # is orphaned (the group was created via start_new_session).
-            try:
-                pgid = os.getpgid(record.process.pid)
-                os.killpg(pgid, signal.SIGTERM)
-                try:
-                    record.process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    os.killpg(pgid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        self.backend.kill(record.handle)
+        # Model removal is manager-side in every mode: killing the autopilot
+        # stack (process or container) never removes the gz entity.
         subprocess.run(
             build_remove_argv(world, vehicle_type, vehicle_id),
             check=False, timeout=10)
@@ -213,7 +191,7 @@ def main(args=None):
         node.wait_for_clock()
         node.spawn_all()
         node.start_udp_listener()
-        rclpy.spin(node)  # keep node alive: hold subprocesses + serve UDP spawns
+        rclpy.spin(node)  # keep node alive: hold vehicle handles + serve UDP
     except (KeyboardInterrupt, TimeoutError) as exc:
         node.get_logger().error(str(exc))
     finally:

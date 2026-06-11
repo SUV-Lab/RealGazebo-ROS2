@@ -2,7 +2,9 @@ class VehicleRecord:
     def __init__(self, vehicle_type, vehicle_id):
         self.vehicle_type = vehicle_type
         self.vehicle_id = vehicle_id
-        self.process = None  # subprocess.Popen (PX4), set later
+        # backend-specific handle: subprocess.Popen in monolithic mode,
+        # container id in docker mode; set right after backend.launch()
+        self.handle = None
 
 
 class VehicleRegistry:
