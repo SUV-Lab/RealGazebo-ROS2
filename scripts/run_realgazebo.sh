@@ -54,7 +54,11 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help|-h)
-            echo "Usage: $0 [options] <config_file> [unreal_ip] [world_type]"
+            echo "Usage: $0 [options] [config_file] [unreal_ip] [world_type]"
+            echo ""
+            echo "Monolithic (single-container) simulation, manager-driven."
+            echo "Without a config file the world starts empty and vehicles"
+            echo "spawn/despawn at runtime over UDP :5006."
             echo ""
             echo "Options:"
             echo "  --no-gpu          Disable GPU acceleration"
@@ -121,11 +125,10 @@ else
     fi
 fi
 
-# Validate required arguments
+# A config file is optional since the manager flow: without one the world
+# starts empty and vehicles arrive at runtime over UDP :5006
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: Config file is required"
-    echo "Usage: $0 [options] <config_file> [unreal_ip] [world_type]"
-    exit 1
+    echo "No vehicle YAML given: empty world, vehicles spawn at runtime via UDP :5006"
 fi
 
 container_name="realgazebo"
@@ -144,14 +147,24 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -d -it --privileged \
     --network host \
     --name "$container_name" mdeagewt/realgazebo:ue5.7
 
-docker cp "$CONFIG_FILE" "$container_name":/home/user/
-
 HEADLESS_ARG="true"
 if [[ "$USE_GUI" == "true" ]]; then
     HEADLESS_ARG="false"
 fi
 
-docker exec -u user -it "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo realgazebo.launch.py vehicle:=/home/user/$(basename "$CONFIG_FILE") unreal_ip:=$UNREAL_IP headless:=$HEADLESS_ARG world:=$WORLD_TYPE"
+# Manager-driven monolithic launch (vehicles run as subprocesses in this
+# container). A YAML only adds a boot fleet; UDP spawn works either way.
+LAUNCH_ARGS="unreal_ip:=$UNREAL_IP headless:=$HEADLESS_ARG world:=$WORLD_TYPE"
+if [[ -n "$CONFIG_FILE" ]]; then
+    docker cp "$CONFIG_FILE" "$container_name":/home/user/
+    LAUNCH_ARGS="yaml_path:=/home/user/$(basename "$CONFIG_FILE") $LAUNCH_ARGS"
+fi
+
+# Allocate a TTY only when we have one (keeps the script usable from CI)
+TTY_FLAG=""
+if [ -t 0 ]; then TTY_FLAG="-it"; fi
+
+docker exec -u user $TTY_FLAG "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo manager_sim.launch.py $LAUNCH_ARGS"
 
 docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null
