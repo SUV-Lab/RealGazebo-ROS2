@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import signal
 import threading
@@ -61,6 +62,10 @@ class SubprocessBackend:
                 os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+
+    def alive(self, handle):
+        """True while the vehicle's PX4 process is still running."""
+        return handle is not None and handle.poll() is None
 
     def _apply_params_later(self, spec, delay=PARAM_APPLY_DELAY_SEC):
         """Best-effort PX4 param set once the instance has had time to boot."""
@@ -168,12 +173,41 @@ class DockerBackend:
         return container_id
 
     def kill(self, handle):
+        # Force-remove in one call: sim vehicles are disposable, and the
+        # shutdown teardown must beat ros2 launch's SIGKILL escalation —
+        # a graceful per-container stop (seconds each) does not.
         if not handle:
             return
+        self._docker.remove_container(handle, force=True)
+
+    def alive(self, handle):
+        """True while the vehicle's container is still running."""
+        if not handle:
+            return False
         try:
-            self._docker.stop_container(handle)
-        finally:
-            self._docker.remove_container(handle, force=True)
+            return bool(self._docker.inspect_container(handle)['State']['Running'])
+        except Exception:
+            return False
+
+    def find_existing(self):
+        """Discover vehicle containers left over from a previous manager run.
+
+        Returns [(vehicle_type, vehicle_id, container_id)] for every running
+        container named vehicle_<id>, recovering the type from the
+        vehicle_type:= argument in its command. Lets a restarted manager
+        adopt (and later despawn) survivors of an uncleanly killed manager.
+        """
+        found = []
+        for entry in self._docker.list_containers(all_states=False):
+            for name in entry.get('Names', []):
+                m = re.fullmatch(r'/vehicle_(\d+)', name)
+                if not m:
+                    continue
+                cmd = ' '.join(entry.get('Command', '').split())
+                t = re.search(r'vehicle_type:=(\S+)', cmd)
+                if t:
+                    found.append((t.group(1), int(m.group(1)), entry['Id']))
+        return found
 
 
 def make_backend(name: str, **opts):

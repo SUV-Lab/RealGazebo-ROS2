@@ -21,7 +21,8 @@ services:
       colcon --log-base /tmp/cl build --packages-select realgazebo
       --build-base /tmp/cb --install-base /tmp/ci &&
       source /tmp/ci/setup.bash &&
-      ros2 launch realgazebo manager_sim.launch.py
+      exec ros2 launch realgazebo manager_sim.launch.py
+      sigterm_timeout:=20 sigkill_timeout:=10
       $${MANAGER_YAML:+yaml_path:=$$MANAGER_YAML}
       headless:=${HEADLESS:-true} world:=${WORLD:-c-track}
       px4_path:=/home/user/realgazebo/RealGazebo-PX4

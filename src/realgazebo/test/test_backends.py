@@ -99,6 +99,8 @@ class FakeDockerClient:
     def __init__(self):
         self.calls = []
         self.created = {}
+        self.running = {}     # container_id -> bool (for inspect)
+        self.listing = []     # entries for list_containers
 
     def create_container(self, name, config):
         self.calls.append(('create', name))
@@ -116,6 +118,14 @@ class FakeDockerClient:
 
     def remove_container(self, container_id, force=True):
         self.calls.append(('remove', container_id))
+
+    def inspect_container(self, container_id):
+        if container_id not in self.running:
+            raise RuntimeError('no such container')
+        return {'State': {'Running': self.running[container_id]}}
+
+    def list_containers(self, all_states=True):
+        return self.listing
 
 
 def _docker_backend(client):
@@ -180,11 +190,46 @@ def test_docker_launch_cleans_up_on_start_failure():
     assert ('remove', 'cid-vehicle_2') in client.calls
 
 
-def test_docker_kill_stops_and_removes():
+def test_docker_kill_force_removes():
     client = FakeDockerClient()
     _docker_backend(client).kill('cid-vehicle_2')
-    assert client.calls == [('stop', 'cid-vehicle_2'),
-                            ('remove', 'cid-vehicle_2')]
+    assert client.calls == [('remove', 'cid-vehicle_2')]
+
+
+def test_subprocess_alive():
+    backend = SubprocessBackend()
+    proc = FakeProc()
+    proc.poll = lambda: None
+    assert backend.alive(proc) is True
+    proc.poll = lambda: 0       # exited
+    assert backend.alive(proc) is False
+    assert backend.alive(None) is False
+
+
+def test_docker_alive():
+    client = FakeDockerClient()
+    backend = _docker_backend(client)
+    client.running['cid-a'] = True
+    assert backend.alive('cid-a') is True
+    client.running['cid-a'] = False
+    assert backend.alive('cid-a') is False
+    assert backend.alive('cid-gone') is False   # inspect raises -> dead
+    assert backend.alive(None) is False
+
+
+def test_docker_find_existing_parses_running_vehicles():
+    client = FakeDockerClient()
+    client.listing = [
+        {'Id': 'cid-7', 'Names': ['/vehicle_7'],
+         'Command': 'bash -c "... vehicle.launch.py instance_id:=7 '
+                    'vehicle_type:=x500 spawnpoint:=1,0,0.5,0 ..."'},
+        {'Id': 'cid-x', 'Names': ['/gazebo'], 'Command': 'irrelevant'},
+        {'Id': 'cid-9', 'Names': ['/vehicle_9'],
+         'Command': 'ros2 launch realgazebo vehicle.launch.py '
+                    'instance_id:=9 vehicle_type:=rover_ackermann'},
+    ]
+    found = _docker_backend(client).find_existing()
+    assert found == [('x500', 7, 'cid-7'), ('rover_ackermann', 9, 'cid-9')]
 
 
 def test_docker_launch_explicit_roster_overrides_actives():

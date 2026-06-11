@@ -74,3 +74,8 @@ class DockerClient:
 
     def inspect_container(self, container_id):
         return self._request('GET', f'/containers/{container_id}/json')
+
+    def list_containers(self, all_states=True):
+        """GET /containers/json — names come prefixed with '/'."""
+        all_str = 'true' if all_states else 'false'
+        return self._request('GET', f'/containers/json?all={all_str}')

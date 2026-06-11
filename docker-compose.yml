@@ -44,6 +44,10 @@ services:
     hostname: gazebo
     privileged: true
     runtime: nvidia
+    # tini as PID 1: a bare `ros2 launch` as PID 1 never receives SIGTERM
+    # (the kernel drops handler-less signals to init), so `compose down`
+    # could not trigger the manager's vehicle teardown
+    init: true
     environment:
       DISPLAY: ${DISPLAY:-:0}
       QT_X11_NO_MITSHM: 1
@@ -72,6 +76,8 @@ services:
         ipv4_address: 172.30.0.2
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # give the manager time to despawn every vehicle on `compose down`
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD-SHELL", "su -s /bin/bash user -c 'source /opt/ros/jazzy/setup.bash && timeout 5 gz topic -e -t /world/c-track/clock -n 1' > /dev/null 2>&1"]
       interval: 10s
@@ -81,7 +87,8 @@ services:
     command: >
       bash -c "source /opt/ros/jazzy/setup.bash &&
       source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash &&
-      ros2 launch realgazebo manager_sim.launch.py
+      exec ros2 launch realgazebo manager_sim.launch.py
+      sigterm_timeout:=20 sigkill_timeout:=10
       $${MANAGER_YAML:+yaml_path:=$$MANAGER_YAML}
       headless:=${HEADLESS:-true} world:=${WORLD:-c-track}
       px4_path:=/home/user/realgazebo/RealGazebo-PX4

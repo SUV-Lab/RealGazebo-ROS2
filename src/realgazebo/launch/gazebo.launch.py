@@ -6,6 +6,7 @@ Vehicles are spawned from separate vehicle containers.
 """
 
 import os
+import glob
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -69,24 +70,34 @@ def launch_setup(context, *args, **kwargs):
         f.write(output_world)
         print(f'c-track model.sdf generated')
 
-    # Generate vehicle SDF templates for all supported types
-    # This is done in Gazebo container so vehicle containers can spawn them
+    # Render EVERY vehicle/obstacle template into this container's
+    # /tmp/models: spawn requests pass a /tmp/models/<type>.sdf path that the
+    # gz server resolves on ITS OWN filesystem, so a type missing here fails
+    # with 'Error finding file'. Scanning the templates (instead of a
+    # hardcoded list) keeps new types working automatically — a stale list
+    # here silently dropped x500_lidar_2d while vehicle containers reported
+    # 'Entity creation successful'.
     model_save_dir = os.path.join('/tmp', 'models')
     os.makedirs(model_save_dir, exist_ok=True)
 
-    support_vehicle = ["x500", "rover_ackermann", "lc_62", "boat"]
-    support_obstacle = ["rock"]
-    model_list = support_vehicle + support_obstacle
+    models_root = os.path.join(current_package_path, 'models')
+    template_names = [os.path.basename(p)
+                      for p in sorted(glob.glob(os.path.join(models_root, '*.sdf.jinja')))]
+    for path in sorted(glob.glob(os.path.join(models_root, '*', '*.sdf.jinja'))):
+        # obstacle-style templates live in <name>/<name>.sdf.jinja
+        # (world templates like c-track/model.sdf.jinja are skipped)
+        stem = os.path.basename(path)[:-len('.sdf.jinja')]
+        if os.path.basename(os.path.dirname(path)) == stem:
+            template_names.append(f'{stem}/{stem}.sdf.jinja')
 
-    for model_type in model_list:
-        env = Environment(loader=FileSystemLoader(os.path.join(current_package_path, 'models')))
-        template_name = f'{model_type}.sdf.jinja' if model_type not in support_obstacle else f'{model_type}/{model_type}.sdf.jinja'
+    env = Environment(loader=FileSystemLoader(models_root))
+    for template_name in template_names:
         model = env.get_template(template_name)
         output_model = model.render(unreal_ip=unreal_ip, unreal_port=unreal_port)
-        model_file_path = os.path.join(model_save_dir, f'{model_type}.sdf')
-        with open(model_file_path, 'w') as f:
+        out_name = os.path.basename(template_name)[:-len('.jinja')]
+        with open(os.path.join(model_save_dir, out_name), 'w') as f:
             f.write(output_model)
-            print(f'{model_type}.sdf generated')
+            print(f'{out_name} generated')
 
     # Launch Gazebo
     gz_sim_pkg = get_package_share_directory('ros_gz_sim')

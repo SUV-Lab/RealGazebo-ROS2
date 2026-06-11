@@ -1,10 +1,12 @@
 import time
+import signal
 import socket
 import threading
 import subprocess
 
 import yaml
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rosgraph_msgs.msg import Clock
 
@@ -52,6 +54,8 @@ class ManagerNode(Node):
         self._stop = False
         self._sock = None
         self.create_subscription(Clock, '/clock', self._on_clock, 10)
+        # watch spawned vehicles so a crashed PX4/container frees its slot
+        self.create_timer(5.0, self._check_vehicles)
 
     # -- startup ----------------------------------------------------------
     def _on_clock(self, _msg):
@@ -95,6 +99,44 @@ class ManagerNode(Node):
                 f"spawned {vehicle_type}_{vehicle_id} "
                 f"(handle {getattr(handle, 'pid', handle)})")
 
+    # -- lifecycle watching -------------------------------------------------
+    def _check_vehicles(self):
+        """Reap vehicles whose backend handle died (crashed PX4/container):
+        free the registry slot and remove the stale gz model."""
+        world = self.get_parameter('world').value
+        with self._spawn_lock:
+            dead = [(t, i) for t, i in self.registry.active_ids()
+                    if not self.backend.alive(self.registry.get(t, i).handle)]
+            for key in dead:
+                self.registry.remove(*key)
+        for vehicle_type, vehicle_id in dead:
+            self.get_logger().warn(
+                f"{vehicle_type}_{vehicle_id} died unexpectedly; "
+                f"cleaning up its model and freeing the id")
+            subprocess.run(
+                build_remove_argv(world, vehicle_type, vehicle_id),
+                check=False, timeout=10)
+
+    def cleanup_leftovers(self):
+        """Remove vehicle containers surviving a previous (killed) manager.
+
+        The gz world restarts together with the manager, so survivors are
+        zombies: their PX4 keeps running but their model no longer exists.
+        A clean slate is the only consistent state. No-op for backends
+        without discovery (subprocess PIDs are gone with the old manager).
+        """
+        find = getattr(self.backend, 'find_existing', None)
+        if find is None:
+            return
+        for vehicle_type, vehicle_id, container_id in find():
+            self.get_logger().warn(
+                f"removing leftover {vehicle_type}_{vehicle_id} container "
+                f"from a previous run (its model died with the old world)")
+            try:
+                self.backend.kill(container_id)
+            except Exception as exc:
+                self.get_logger().error(f"leftover cleanup failed: {exc}")
+
     # -- boot-time YAML trigger -------------------------------------------
     def spawn_all(self):
         yaml_path = self.get_parameter('yaml_path').value
@@ -109,9 +151,16 @@ class ManagerNode(Node):
         roster = sorted(f'{s.vehicle_type}_{s.vehicle_id}' for s in specs)
         for spec in specs:
             x, y, z, yaw = spec.spawnpoint
-            self._spawn_one(spec.vehicle_type, spec.vehicle_id, (x, y, z),
-                            (0.0, 0.0, yaw), spec.build_target_path, world,
-                            roster=roster)
+            try:
+                self._spawn_one(spec.vehicle_type, spec.vehicle_id, (x, y, z),
+                                (0.0, 0.0, yaw), spec.build_target_path, world,
+                                roster=roster)
+            except Exception as exc:
+                # One failed vehicle (e.g. its MAVLink host port is taken)
+                # must not kill the whole boot — log and keep going.
+                self.get_logger().error(
+                    f"boot spawn failed for "
+                    f"{spec.vehicle_type}_{spec.vehicle_id}: {exc}")
             time.sleep(SPAWN_STAGGER_SEC)
         self.get_logger().info(
             f"spawn complete: {[f'{t}_{i}' for t, i in self.registry.active_ids()]}")
@@ -204,14 +253,24 @@ class ManagerNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+
+    def _sigterm_to_interrupt(*_):
+        # `docker stop` / ros2 launch shutdown delivers SIGTERM; python's
+        # default disposition would kill us without running the finally
+        # teardown below, leaving vehicle containers behind
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, _sigterm_to_interrupt)
     node = ManagerNode()
     try:
         node.wait_for_clock()
+        node.cleanup_leftovers()
         node.spawn_all()
         node.start_udp_listener()
         rclpy.spin(node)  # keep node alive: hold vehicle handles + serve UDP
-    except (KeyboardInterrupt, TimeoutError) as exc:
-        node.get_logger().error(str(exc))
+    except (KeyboardInterrupt, ExternalShutdownException, TimeoutError) as exc:
+        # SIGINT/SIGTERM land here; the finally block runs the teardown
+        node.get_logger().error(str(exc) or type(exc).__name__)
     finally:
         node.shutdown()
         node.destroy_node()
