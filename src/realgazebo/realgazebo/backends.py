@@ -1,12 +1,18 @@
 import os
 import re
 import time
+import types
 import signal
 import threading
 import subprocess
 
+import yaml
+
 from .spawn_core import (
     render_sdf, build_create_argv, build_px4_command, build_param_argv)
+from .vehicle_extras import (
+    VEHICLE_CAMERAS, RTSP_PORT, get_sensor_bridges,
+    build_image_receiver_argv, build_sensor_bridge_argv)
 
 # PX4 params applied after spawn (same as legacy realgazebo.launch.py)
 POST_SPAWN_PARAMS = [
@@ -45,19 +51,74 @@ class SubprocessBackend:
         proc = subprocess.Popen(
             argv, env={**os.environ, **px4_env}, cwd=px4_cwd,
             start_new_session=True)
+        extras = self._launch_extras(spec, world, sdf_path, unreal_ip)
         threading.Thread(
             target=self._apply_params_later, args=(spec,), daemon=True).start()
-        return proc
+        # Composite handle: PX4 decides liveness; extras (each its own
+        # session, so the ros2-run wrapper and its node die together) are
+        # torn down alongside it. A process can only join groups within its
+        # own session, so the extras cannot share PX4's group.
+        return types.SimpleNamespace(pid=proc.pid, px4=proc, extras=extras)
+
+    def _launch_extras(self, spec, world, sdf_path, unreal_ip):
+        """Per-vehicle extras, matching what vehicle.launch.py provides in
+        docker mode: camera receivers (UNCONFIGURED; image_viewer drives
+        their lifecycle) and the lidar sensor bridge. Each runs in its own
+        session/group so killpg reaps the ros2-run wrapper together with
+        the node it spawns. Best-effort: a failing extra must not fail the
+        spawn itself. Returns the started Popen handles.
+        """
+        extras = []
+        try:
+            for camera_type in VEHICLE_CAMERAS.get(spec.vehicle_type, ['front']):
+                extras.append(subprocess.Popen(
+                    build_image_receiver_argv(
+                        spec.vehicle_type, spec.vehicle_id, camera_type,
+                        unreal_ip, RTSP_PORT),
+                    start_new_session=True))
+
+            search_paths = [
+                os.path.join(spec.build_target_path, 'Tools/simulation/gz/models')]
+            try:
+                from ament_index_python.packages import get_package_share_directory
+                search_paths.insert(0, os.path.join(
+                    get_package_share_directory('realgazebo'), 'models'))
+            except Exception:
+                pass
+            bridges = get_sensor_bridges(
+                spec.vehicle_type, spec.vehicle_id, world, sdf_path, search_paths)
+            if bridges:
+                os.makedirs('/tmp/bridges', exist_ok=True)
+                config_path = f'/tmp/bridges/{spec.vehicle_type}_{spec.vehicle_id}.yaml'
+                with open(config_path, 'w') as f:
+                    yaml.dump(bridges, f)
+                extras.append(subprocess.Popen(
+                    build_sensor_bridge_argv(
+                        config_path,
+                        f'sensor_bridge_{spec.vehicle_type}_{spec.vehicle_id}'),
+                    start_new_session=True))
+        except Exception as exc:
+            print(f'[SubprocessBackend] vehicle extras failed for '
+                  f'{spec.vehicle_type}_{spec.vehicle_id}: {exc}', flush=True)
+        return extras
 
     def kill(self, handle):
-        """Terminate the vehicle's process group (PX4 may fork children)."""
+        """Terminate the vehicle's process groups (PX4 + extras)."""
         if handle is None:
             return
+        px4 = getattr(handle, 'px4', handle)
+        for proc in [px4, *getattr(handle, 'extras', [])]:
+            self._kill_group(proc)
+
+    @staticmethod
+    def _kill_group(proc):
+        if proc is None:
+            return
         try:
-            pgid = os.getpgid(handle.pid)
+            pgid = os.getpgid(proc.pid)
             os.killpg(pgid, signal.SIGTERM)
             try:
-                handle.wait(timeout=5)
+                proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
@@ -65,7 +126,8 @@ class SubprocessBackend:
 
     def alive(self, handle):
         """True while the vehicle's PX4 process is still running."""
-        return handle is not None and handle.poll() is None
+        px4 = getattr(handle, 'px4', handle)
+        return px4 is not None and px4.poll() is None
 
     def _apply_params_later(self, spec, delay=PARAM_APPLY_DELAY_SEC):
         """Best-effort PX4 param set once the instance has had time to boot."""

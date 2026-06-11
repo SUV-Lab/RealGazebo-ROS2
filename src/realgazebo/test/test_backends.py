@@ -13,21 +13,24 @@ class FakeProc:
     def __init__(self, pid=4242):
         self.pid = pid
         self.waited = False
+        self.extras = []   # composite-handle duck-typing for plain procs
 
     def wait(self, timeout=None):
         self.waited = True
 
 
 def test_launch_renders_creates_and_boots_px4(monkeypatch, tmp_path):
-    calls = {}
+    calls = {'popen': []}
     monkeypatch.setattr(backends, 'render_sdf',
                         lambda t, ip, port: f'/tmp/models/{t}.sdf')
+    monkeypatch.setattr(backends, 'get_sensor_bridges',
+                        lambda *a, **kw: [])
     monkeypatch.setattr(backends.subprocess, 'run',
                         lambda argv, **kw: calls.setdefault('create', argv))
     fake = FakeProc()
 
-    def fake_popen(argv, env=None, cwd=None, start_new_session=False):
-        calls['px4'] = (argv, cwd, start_new_session)
+    def fake_popen(argv, **kwargs):
+        calls['popen'].append((argv, kwargs))
         return fake
 
     monkeypatch.setattr(backends.subprocess, 'Popen', fake_popen)
@@ -43,12 +46,52 @@ def test_launch_renders_creates_and_boots_px4(monkeypatch, tmp_path):
     handle = SubprocessBackend().launch(
         spec, 'c-track', (1.0, 2.0, 0.5), (0.0, 0.0, 0.0), '10.0.0.5', 5005)
 
-    assert handle is fake
+    assert handle.px4 is fake
+    assert handle.pid == fake.pid
     assert calls['create'][:4] == ['ros2', 'run', 'ros_gz_sim', 'create']
-    argv, cwd, new_session = calls['px4']
-    assert argv[-2:] == ['-i', '2']
-    assert cwd.endswith('build/px4_sitl_default')
-    assert new_session is True
+
+    px4_argv, px4_kwargs = calls['popen'][0]
+    assert px4_argv[-2:] == ['-i', '2']
+    assert px4_kwargs['cwd'].endswith('build/px4_sitl_default')
+    assert px4_kwargs['start_new_session'] is True
+
+    # parity extras: one camera receiver per VEHICLE_CAMERAS entry, each in
+    # its own session (cannot join PX4's group across sessions)
+    receivers = [(a, k) for a, k in calls['popen'][1:]
+                 if 'image_receiver_node' in a]
+    assert len(receivers) == 2  # x500: front + bottom
+    names = {a[a.index('-r') + 1] for a, _ in receivers}
+    assert names == {'__node:=image_receiver_x500_2_front',
+                     '__node:=image_receiver_x500_2_bottom'}
+    assert all(k.get('start_new_session') is True for _, k in receivers)
+    assert len(handle.extras) == 2
+
+
+def test_launch_starts_sensor_bridge_for_lidar(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(backends, 'render_sdf',
+                        lambda t, ip, port: f'/tmp/models/{t}.sdf')
+    monkeypatch.setattr(
+        backends, 'get_sensor_bridges',
+        lambda *a, **kw: [{'ros_topic_name': '/vehicle3/scan'}])
+    monkeypatch.setattr(backends.subprocess, 'run', lambda argv, **kw: None)
+    monkeypatch.setattr(backends.subprocess, 'Popen',
+                        lambda argv, **kw: calls.append(argv) or FakeProc())
+    monkeypatch.setattr(
+        backends.threading, 'Thread',
+        lambda **kw: types.SimpleNamespace(start=lambda: None))
+
+    airframes = tmp_path / 'ROMFS/px4fmu_common/init.d-posix/airframes'
+    airframes.mkdir(parents=True)
+    (airframes / '4013_gz_x500_lidar_2d').write_text('')
+    spec = VehicleSpec(2, 'x500_lidar_2d', str(tmp_path), (0.0, 0.0, 0.0, 0.0))
+
+    SubprocessBackend().launch(
+        spec, 'urban', (0, 0, 0), (0, 0, 0), 'h', 5005)
+
+    bridge_argvs = [a for a in calls if 'parameter_bridge' in a]
+    assert len(bridge_argvs) == 1
+    assert '__node:=sensor_bridge_x500_lidar_2d_2' in bridge_argvs[0]
 
 
 def test_kill_terminates_process_group(monkeypatch):
@@ -60,6 +103,28 @@ def test_kill_terminates_process_group(monkeypatch):
     SubprocessBackend().kill(proc)
     assert events == [(999, signal.SIGTERM)]
     assert proc.waited
+
+
+def test_kill_composite_handle_reaps_extras_too(monkeypatch):
+    import types as _types
+    events = []
+    monkeypatch.setattr(backends.os, 'getpgid', lambda pid: pid)  # pgid = pid
+    monkeypatch.setattr(backends.os, 'killpg',
+                        lambda pgid, sig: events.append(pgid))
+    px4, recv1, recv2 = FakeProc(pid=10), FakeProc(pid=20), FakeProc(pid=30)
+    handle = _types.SimpleNamespace(pid=10, px4=px4, extras=[recv1, recv2])
+    SubprocessBackend().kill(handle)
+    assert events == [10, 20, 30]
+
+
+def test_alive_uses_px4_of_composite_handle():
+    import types as _types
+    px4 = FakeProc()
+    px4.poll = lambda: None
+    handle = _types.SimpleNamespace(pid=px4.pid, px4=px4, extras=[])
+    assert SubprocessBackend().alive(handle) is True
+    px4.poll = lambda: 0
+    assert SubprocessBackend().alive(handle) is False
 
 
 def test_kill_escalates_to_sigkill_on_timeout(monkeypatch):

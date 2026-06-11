@@ -20,7 +20,7 @@ from ament_index_python.packages import get_package_share_directory, get_package
 import launch
 from launch import LaunchDescription
 from launch.substitutions import PathJoinSubstitution, FindExecutable
-from launch_ros.actions import Node
+from launch_ros.actions import Node, LifecycleNode
 from launch.substitutions import LaunchConfiguration
 from launch.actions import ExecuteProcess
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -37,6 +37,18 @@ SENSOR_BRIDGE_TYPES = {
         ('scan',        'sensor_msgs/msg/LaserScan',   'gz.msgs.LaserScan'),
         ('scan/points', 'sensor_msgs/msg/PointCloud2', 'gz.msgs.PointCloudPacked'),
     ],
+}
+
+# UE cameras streamed per vehicle type. The RTSP path uses the REAL type
+# name ({type}_{id}/{camera}) — since x500_lidar_2d got its own
+# vehicle_code (5), the UE side streams it under its own name too (no
+# more remapping to plain x500).
+VEHICLE_CAMERAS = {
+    'x500': ['front', 'bottom'],
+    'x500_lidar_2d': ['front', 'bottom'],
+    'lc_62': ['front', 'bottom'],
+    'rover_ackermann': ['front', 'top'],
+    'boat': ['front', 'top'],
 }
 
 
@@ -143,6 +155,7 @@ def launch_setup(context, *args, **kwargs):
     px4_path = LaunchConfiguration('px4_path').perform(context)
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
+    rtsp_port = int(LaunchConfiguration('rtsp_port').perform(context))
     start_control_node = LaunchConfiguration('start_control_node').perform(context).lower() == 'true'
     vehicle_models_str = LaunchConfiguration('vehicle_models').perform(context)
 
@@ -312,6 +325,29 @@ def launch_setup(context, *args, **kwargs):
     )
     timed_actions.append(network_sim_node)
 
+    # 8. UE camera receivers: one per camera, pulling the photoreal RTSP
+    #    stream (rtsp://{unreal_ip}:{rtsp_port}/{type}_{id}/{camera}) into
+    #    /vehicle{id+1}/camera/{camera}/image_raw. The nodes start
+    #    UNCONFIGURED by design: image_viewer (scripts/run_image_stream.sh)
+    #    drives configure/activate on demand via the /change_state service,
+    #    so only the cameras actually being watched cost decode time. The
+    #    node name below is the contract image_viewer uses to find it.
+    for camera_type in VEHICLE_CAMERAS.get(vehicle_type, ['front']):
+        receiver_node = LifecycleNode(
+            package='realgazebo',
+            executable='image_receiver_node',
+            name=f'image_receiver_{vehicle_type}_{instance_id}_{camera_type}',
+            namespace='',
+            parameters=[{
+                'vehicle_type': vehicle_type,
+                'vehicle_id': instance_id,
+                'unreal_ip': unreal_ip,
+                'rtsp_port': rtsp_port,
+                'camera_type': camera_type,
+            }]
+        )
+        timed_actions.append(receiver_node)
+
     # sensor bridge (inferred from rendered SDF)
     model_search_paths = [
         os.path.join(current_package_path, 'models'),
@@ -408,6 +444,14 @@ def generate_launch_description():
             default_value='false',
             description='Whether to start the drone controller node',
             choices=['true', 'false']
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'rtsp_port',
+            default_value='8554',
+            description='UE RTSP port for the per-camera image receivers'
         )
     )
 
