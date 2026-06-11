@@ -18,7 +18,9 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument(
             'yaml_path',
-            default_value=os.path.join(realgazebo_share, 'yaml', 'example.yaml')),
+            default_value='',
+            description='Vehicle YAML to spawn at boot; '
+                        'empty (default) = no boot spawn, UDP-only mode'),
         DeclareLaunchArgument('world', default_value='c-track'),
         DeclareLaunchArgument('unreal_ip', default_value='127.0.0.1'),
         DeclareLaunchArgument('unreal_port', default_value='5005'),
@@ -48,7 +50,7 @@ def generate_launch_description():
         cmd=[FindExecutable(name='MicroXRCEAgent'), 'udp4', '-p', '8888'])
 
     manager = Node(
-        package='realgazebo_manager',
+        package='realgazebo',
         executable='manager_node',
         name='realgazebo_manager',
         output='screen',

@@ -1,5 +1,5 @@
-from realgazebo_manager.yaml_config import VehicleSpec
-from realgazebo_manager import spawn_core
+from realgazebo.yaml_config import VehicleSpec
+from realgazebo import spawn_core
 
 
 def test_build_create_argv():

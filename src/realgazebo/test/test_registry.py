@@ -1,5 +1,5 @@
 import pytest
-from realgazebo_manager.registry import VehicleRegistry
+from realgazebo.registry import VehicleRegistry
 
 
 def test_add_and_is_active():

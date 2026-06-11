@@ -1,5 +1,5 @@
 import pytest
-from realgazebo_manager.vehicle_codes import type_for_code
+from realgazebo.vehicle_codes import type_for_code
 
 
 def test_known_codes():

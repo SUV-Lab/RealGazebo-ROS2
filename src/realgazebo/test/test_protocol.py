@@ -1,7 +1,7 @@
 import struct
 
 import pytest
-from realgazebo_manager.protocol import (
+from realgazebo.protocol import (
     parse_packet, pack_pose, pack_destroy, SpawnCommand, DespawnCommand)
 
 

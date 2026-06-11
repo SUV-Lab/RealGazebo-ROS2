@@ -1,5 +1,5 @@
 import pytest
-from realgazebo_manager.airframes import scan_airframes, get_autostart_id
+from realgazebo.airframes import scan_airframes, get_autostart_id
 
 
 def _make_airframes(tmp_path, names):

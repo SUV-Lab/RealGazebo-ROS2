@@ -1,4 +1,4 @@
-from realgazebo_manager.yaml_config import parse_vehicles, VehicleSpec
+from realgazebo.yaml_config import parse_vehicles, VehicleSpec
 
 
 def test_parse_vehicles_basic():

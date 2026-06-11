@@ -1,5 +1,5 @@
 import math
-from realgazebo_manager.geometry import quat_to_euler
+from realgazebo.geometry import quat_to_euler
 
 
 def test_identity():

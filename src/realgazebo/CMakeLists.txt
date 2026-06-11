@@ -17,6 +17,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 
 # Build RealGazebo plugin
 add_library(RealGazebo SHARED
@@ -195,11 +196,8 @@ install(TARGETS RealGazebo MotorFailureROS2 ServoFailureROS2 image_receiver_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch
-  DESTINATION share/${PROJECT_NAME}
-)
-
-install(DIRECTORY models
+# Shared data: launch files, models, worlds, vehicle yaml configs
+install(DIRECTORY launch models worlds yaml
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -207,8 +205,12 @@ install(DIRECTORY plugins
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY worlds
-  DESTINATION share/${PROJECT_NAME}
+# Python manager: install the realgazebo python module and the node entry point
+ament_python_install_package(${PROJECT_NAME})
+
+install(PROGRAMS
+  scripts/manager_node
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
@@ -221,6 +223,12 @@ if(BUILD_TESTING)
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  # Python unit tests for the manager modules
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(${PROJECT_NAME}_python_tests test
+    TIMEOUT 120
+  )
 endif()
 
 ament_package()
