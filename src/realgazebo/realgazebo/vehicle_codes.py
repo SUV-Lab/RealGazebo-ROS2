@@ -2,6 +2,12 @@ import os
 import re
 from glob import glob
 
+# Wire convention: codes 0..199 are PX4 vehicles (full autopilot stack),
+# codes >= 200 are static props/obstacles - just a gz entity, no PX4, no
+# per-vehicle container, and movable at runtime via repeated MSG_POSE.
+# Matches the existing numbering (201 = rock).
+PROP_CODE_MIN = 200
+
 # Legacy fallback map, mirroring the gz plugin's getVehicleCode() if-chain.
 # Used only when no template declares a <vehicle_code> (old checkouts).
 LEGACY_CODE_TO_TYPE = {
@@ -51,3 +57,18 @@ def type_for_code(code: int, mapping=None) -> str:
     if code not in mapping:
         raise ValueError(f"unknown vehicle_code {code}")
     return mapping[code]
+
+
+def code_for_type(vehicle_type: str, mapping=None) -> int:
+    """Reverse lookup: wire code for a type string; raise on unknown."""
+    if mapping is None:
+        mapping = LEGACY_CODE_TO_TYPE
+    for code, name in mapping.items():
+        if name == vehicle_type:
+            return code
+    raise ValueError(f"unknown vehicle type '{vehicle_type}'")
+
+
+def is_prop_code(code: int) -> bool:
+    """True for static props/obstacles (no autopilot stack)."""
+    return code >= PROP_CODE_MIN

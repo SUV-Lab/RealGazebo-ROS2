@@ -3,9 +3,18 @@ from collections import namedtuple
 
 # RealGazebo UDP wire protocol (must match the gz plugin / UE side).
 # Header: vehicle_num(u8), vehicle_code(u8), message_id(u8).
+# vehicle_code 0..199 = PX4 vehicles, >= 200 = static props/obstacles
+# (see vehicle_codes.PROP_CODE_MIN).
 HEADER_SIZE = 3
-MSG_POSE = 1     # pose packet; reused as the inbound SPAWN command (UE -> manager)
-MSG_DESTROY = 4  # destroy packet; reused as the inbound DESPAWN command
+# Pose packet, reused inbound (UE -> manager) as an UPSERT:
+#  - num unknown            -> SPAWN (vehicle or prop)
+#  - num active, same code  -> prop: MOVE (set_pose); vehicle: ignored
+#  - num active, other code -> dropped (sender bug; ids are global)
+MSG_POSE = 1
+# Destroy packet, reused as the inbound DESPAWN command. The same
+# code-vs-holder validation applies: a num active under another code
+# is dropped, never despawned.
+MSG_DESTROY = 4
 
 # Pose payload: 7 little-endian float32 = pos(x, y, z) + quat(x, y, z, w),
 # expressed in the Gazebo frame (meters, right-handed).

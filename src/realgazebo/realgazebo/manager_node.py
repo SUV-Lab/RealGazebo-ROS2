@@ -11,11 +11,13 @@ from rclpy.node import Node
 from rosgraph_msgs.msg import Clock
 
 from .yaml_config import parse_vehicles, VehicleSpec
-from .spawn_core import build_remove_argv
+from .spawn_core import (
+    render_sdf, build_create_argv, build_remove_argv, build_set_pose_argv)
 from .backends import make_backend
 from .registry import VehicleRegistry
 from .protocol import parse_packet, DespawnCommand
-from .vehicle_codes import scan_vehicle_codes, type_for_code
+from .vehicle_codes import (
+    scan_vehicle_codes, type_for_code, code_for_type, is_prop_code)
 from .geometry import quat_to_euler
 
 SPAWN_STAGGER_SEC = 0.5
@@ -39,6 +41,9 @@ class ManagerNode(Node):
         self.declare_parameter('docker_vehicle_network', 'vehicle-network')
         self.declare_parameter('mavlink_gcs_ip', '172.17.0.1')
         self.registry = VehicleRegistry()
+        # code->type map scanned from the model templates (single source of
+        # truth shared with the gz plugin's <vehicle_code> SDF element)
+        self._code_map = scan_vehicle_codes()
         self.backend = make_backend(
             self.get_parameter('backend').value,
             image=self.get_parameter('docker_image').value,
@@ -46,8 +51,10 @@ class ManagerNode(Node):
             gazebo_network=self.get_parameter('docker_gazebo_network').value,
             vehicle_network=self.get_parameter('docker_vehicle_network').value,
             mavlink_gcs_ip=self.get_parameter('mavlink_gcs_ip').value,
+            # props are not V2V participants, keep them out of the roster
             roster_fn=lambda: [
-                f'{t}_{i}' for t, i in self.registry.active_ids()],
+                f'{t}_{i}' for t, i in self.registry.active_ids()
+                if not self.registry.get(t, i).prop],
         )
         self._spawn_lock = threading.Lock()
         self._clock_seen = False
@@ -71,19 +78,50 @@ class ManagerNode(Node):
         self.get_logger().info("Gazebo /clock detected; starting spawn")
 
     # -- spawn core (one trigger-agnostic path) ---------------------------
+    def _is_prop_type(self, vehicle_type):
+        """True when the type is a static prop (wire code >= 200)."""
+        try:
+            return is_prop_code(code_for_type(vehicle_type, self._code_map))
+        except ValueError:
+            return False
+
     def _spawn_one(self, vehicle_type, vehicle_id, position, rpy,
                    build_target_path, world, roster=None):
-        """Spawn a single vehicle through the configured backend.
+        """Spawn a single vehicle or prop.
 
-        Idempotent: a (type, id) already active is skipped. Called from both
-        the boot-time YAML loop and the UDP listener thread, so the registry
-        mutation is guarded by a lock. roster: complete vehicle_models list
-        for network_sim, known upfront for boot-time fleets.
+        Idempotent: a (type, id) already active is skipped, and an id held
+        by a DIFFERENT type is refused (the numeric id drives the ROS
+        namespace, MAVLink port and UE num, so it is globally unique).
+        Called from both the boot-time YAML loop and the UDP listener
+        thread, so the registry mutation is guarded by a lock. roster:
+        complete vehicle_models list for network_sim, known upfront for
+        boot-time fleets. Props skip the backend entirely: they are a bare
+        gz entity created (and later removed) by the manager itself.
         """
         with self._spawn_lock:
-            if self.registry.is_active(vehicle_type, vehicle_id):
+            holder = self.registry.type_of(vehicle_id)
+            if holder == vehicle_type:
                 self.get_logger().warn(
                     f"skip duplicate {vehicle_type}_{vehicle_id}")
+                return
+            if holder is not None:
+                self.get_logger().warn(
+                    f"refusing {vehicle_type}_{vehicle_id}: id {vehicle_id} "
+                    f"is already active as {holder}")
+                return
+            if self._is_prop_type(vehicle_type):
+                sdf_path = render_sdf(
+                    vehicle_type,
+                    self.get_parameter('unreal_ip').value,
+                    self.get_parameter('unreal_port').value)
+                subprocess.run(
+                    build_create_argv(vehicle_type, vehicle_id, sdf_path,
+                                      world, position, rpy),
+                    check=True, timeout=30)
+                record = self.registry.add(vehicle_type, vehicle_id)
+                record.prop = True
+                self.get_logger().info(
+                    f"spawned prop {vehicle_type}_{vehicle_id}")
                 return
             spec = VehicleSpec(
                 vehicle_id, vehicle_type, build_target_path,
@@ -105,8 +143,10 @@ class ManagerNode(Node):
         free the registry slot and remove the stale gz model."""
         world = self.get_parameter('world').value
         with self._spawn_lock:
+            # props have no autopilot process/container to die - skip them
             dead = [(t, i) for t, i in self.registry.active_ids()
-                    if not self.backend.alive(self.registry.get(t, i).handle)]
+                    if not self.registry.get(t, i).prop
+                    and not self.backend.alive(self.registry.get(t, i).handle)]
             for key in dead:
                 self.registry.remove(*key)
         for vehicle_type, vehicle_id in dead:
@@ -148,7 +188,9 @@ class ManagerNode(Node):
         specs = parse_vehicles(config)
         # The full fleet is known upfront, so every vehicle gets the complete
         # network_sim roster (matches what generate_compose.py used to bake).
-        roster = sorted(f'{s.vehicle_type}_{s.vehicle_id}' for s in specs)
+        # Props are not V2V participants and stay out of it.
+        roster = sorted(f'{s.vehicle_type}_{s.vehicle_id}' for s in specs
+                        if not self._is_prop_type(s.vehicle_type))
         for spec in specs:
             x, y, z, yaw = spec.spawnpoint
             try:
@@ -167,9 +209,6 @@ class ManagerNode(Node):
 
     # -- runtime UDP trigger ----------------------------------------------
     def start_udp_listener(self):
-        # code->type map scanned from the model templates (single source of
-        # truth shared with the gz plugin's <vehicle_code> SDF element)
-        self._code_map = scan_vehicle_codes()
         self.get_logger().info(f"vehicle codes: {self._code_map}")
         port = self.get_parameter('spawn_udp_port').value
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -189,34 +228,100 @@ class ManagerNode(Node):
                 continue
             except OSError:
                 break
+            # Drain whatever else is already queued. Handling a command can
+            # take hundreds of ms (gz service / backend launch), while a UI
+            # dragging a prop streams MSG_POSE at frame rate - processing
+            # the backlog one by one would replay stale teleports for
+            # seconds after the user lets go. Acting on a batch lets
+            # superseded poses collapse to the newest one instead.
+            batch = [data]
+            self._sock.setblocking(False)
             try:
-                cmd = parse_packet(data)
-            except ValueError as exc:
-                self.get_logger().warn(f"bad packet: {exc}")
-                continue
-            if cmd is None:
-                continue  # not a spawn/despawn command
-            try:
-                vehicle_type = type_for_code(cmd.vehicle_code, self._code_map)
-            except ValueError as exc:
-                self.get_logger().warn(str(exc))
-                continue
-            if isinstance(cmd, DespawnCommand):
-                self.get_logger().info(
-                    f"UDP despawn: {vehicle_type}_{cmd.vehicle_num}")
+                while len(batch) < 512:
+                    try:
+                        more, _ = self._sock.recvfrom(2048)
+                    except (BlockingIOError, OSError):
+                        break
+                    batch.append(more)
+            finally:
+                self._sock.settimeout(0.5)
+            cmds = []
+            for raw in batch:
                 try:
-                    self._despawn_one(vehicle_type, cmd.vehicle_num, world)
-                except Exception as exc:
-                    self.get_logger().error(f"despawn failed: {exc}")
-                continue
-            rpy = quat_to_euler(*cmd.quaternion)
+                    cmd = parse_packet(raw)
+                except ValueError as exc:
+                    self.get_logger().warn(f"bad packet: {exc}")
+                    continue
+                if cmd is not None:  # None = not a spawn/despawn/pose command
+                    cmds.append(cmd)
+            for idx, cmd in enumerate(cmds):
+                if not isinstance(cmd, DespawnCommand) and any(
+                        not isinstance(later, DespawnCommand)
+                        and later.vehicle_num == cmd.vehicle_num
+                        and later.vehicle_code == cmd.vehicle_code
+                        for later in cmds[idx + 1:]):
+                    continue  # superseded by a newer pose for the same entity
+                self._handle_command(cmd, world, default_px4)
+
+    def _handle_command(self, cmd, world, default_px4):
+        """Act on one parsed wire command (runs on the UDP listener thread)."""
+        try:
+            vehicle_type = type_for_code(cmd.vehicle_code, self._code_map)
+        except ValueError as exc:
+            self.get_logger().warn(str(exc))
+            return
+        # id/type validation: the packet's code must match whatever type
+        # currently holds the num - a mismatch is a sender bug, and acting
+        # on it would collide ports/namespaces or hit the wrong entity, so
+        # the packet is dropped loudly.
+        holder = self.registry.type_of(cmd.vehicle_num)
+        if holder is not None and holder != vehicle_type:
+            self.get_logger().warn(
+                f"dropped packet: id {cmd.vehicle_num} is active as "
+                f"{holder}, but the packet says {vehicle_type}")
+            return
+        if isinstance(cmd, DespawnCommand):
             self.get_logger().info(
-                f"UDP spawn: {vehicle_type}_{cmd.vehicle_num} at {cmd.position}")
+                f"UDP despawn: {vehicle_type}_{cmd.vehicle_num}")
             try:
-                self._spawn_one(vehicle_type, cmd.vehicle_num, cmd.position,
-                                rpy, default_px4, world)
+                self._despawn_one(vehicle_type, cmd.vehicle_num, world)
             except Exception as exc:
-                self.get_logger().error(f"spawn failed: {exc}")
+                self.get_logger().error(f"despawn failed: {exc}")
+            return
+        if holder is not None and self._is_prop_type(vehicle_type):
+            # upsert: MSG_POSE for an active prop means MOVE (mirrors the
+            # gz->UE direction, where a known num is a pose update)
+            try:
+                self._move_prop(vehicle_type, cmd.vehicle_num,
+                                cmd.position, cmd.quaternion, world)
+            except Exception as exc:
+                self.get_logger().error(f"move failed: {exc}")
+            return
+        rpy = quat_to_euler(*cmd.quaternion)
+        self.get_logger().info(
+            f"UDP spawn: {vehicle_type}_{cmd.vehicle_num} at {cmd.position}")
+        try:
+            self._spawn_one(vehicle_type, cmd.vehicle_num, cmd.position,
+                            rpy, default_px4, world)
+        except Exception as exc:
+            self.get_logger().error(f"spawn failed: {exc}")
+
+    def _move_prop(self, vehicle_type, vehicle_id, position, quaternion,
+                   world):
+        """Teleport an active prop.
+
+        No explicit rate limit: the batch drain in _udp_loop collapses a
+        pose stream to one move per prop per cycle, so the (blocking) gz
+        service call itself paces this naturally.
+        """
+        proc = subprocess.run(
+            build_set_pose_argv(world, vehicle_type, vehicle_id,
+                                position, quaternion),
+            capture_output=True, timeout=5)
+        if proc.returncode != 0:
+            self.get_logger().warn(
+                f"move failed for {vehicle_type}_{vehicle_id}: "
+                f"{proc.stderr.decode(errors='replace').strip()}")
 
     def _despawn_one(self, vehicle_type, vehicle_id, world):
         """Tear down the vehicle via the backend and remove its gz model."""
@@ -226,7 +331,8 @@ class ManagerNode(Node):
                     f"despawn: {vehicle_type}_{vehicle_id} not active")
                 return
             record = self.registry.remove(vehicle_type, vehicle_id)
-        self.backend.kill(record.handle)
+        if not record.prop:
+            self.backend.kill(record.handle)
         # Model removal is manager-side in every mode: killing the autopilot
         # stack (process or container) never removes the gz entity.
         subprocess.run(

@@ -1,6 +1,6 @@
 import os
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from .airframes import get_autostart_id
 
@@ -15,7 +15,12 @@ def render_sdf(vehicle_type, unreal_ip, unreal_port,
         from ament_index_python.packages import get_package_share_directory
         models_dir = os.path.join(get_package_share_directory('realgazebo'), 'models')
     env = Environment(loader=FileSystemLoader(models_dir))
-    template = env.get_template(f'{vehicle_type}.sdf.jinja')
+    try:
+        template = env.get_template(f'{vehicle_type}.sdf.jinja')
+    except TemplateNotFound:
+        # obstacle-style templates live in <name>/<name>.sdf.jinja
+        # (same convention gazebo.launch.py scans for the gz server)
+        template = env.get_template(f'{vehicle_type}/{vehicle_type}.sdf.jinja')
     rendered = template.render(unreal_ip=unreal_ip, unreal_port=unreal_port)
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, f'{vehicle_type}.sdf')
@@ -73,4 +78,22 @@ def build_remove_argv(world, vehicle_type, vehicle_id):
         'gz', 'service', '-s', f'/world/{world}/remove',
         '--reqtype', 'gz.msgs.Entity', '--reptype', 'gz.msgs.Boolean',
         '--timeout', '3000', '--req', f'name: "{name}" type: MODEL',
+    ]
+
+
+def build_set_pose_argv(world, vehicle_type, vehicle_id, position, quaternion):
+    """Build a `gz service` call to teleport an existing entity (prop move).
+
+    quaternion is (x, y, z, w) in the Gazebo frame, straight from the wire.
+    """
+    name = f'{vehicle_type}_{vehicle_id}'
+    x, y, z = position
+    qx, qy, qz, qw = quaternion
+    req = (f'name: "{name}" '
+           f'position {{x: {x}, y: {y}, z: {z}}} '
+           f'orientation {{x: {qx}, y: {qy}, z: {qz}, w: {qw}}}')
+    return [
+        'gz', 'service', '-s', f'/world/{world}/set_pose',
+        '--reqtype', 'gz.msgs.Pose', '--reptype', 'gz.msgs.Boolean',
+        '--timeout', '1000', '--req', req,
     ]

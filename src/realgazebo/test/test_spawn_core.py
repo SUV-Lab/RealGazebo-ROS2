@@ -46,9 +46,33 @@ def test_render_sdf(tmp_path):
     assert "ip=10.0.0.5 port=5005" in open(out).read()
 
 
+def test_render_sdf_nested_obstacle_template(tmp_path):
+    # obstacle-style templates live in <name>/<name>.sdf.jinja
+    models = tmp_path / "models"
+    (models / "rock").mkdir(parents=True)
+    (models / "rock" / "rock.sdf.jinja").write_text("rock ip={{ unreal_ip }}")
+    out = spawn_core.render_sdf(
+        'rock', '10.0.0.5', 5005,
+        models_dir=str(models), output_dir=str(tmp_path / "out"))
+    assert out.endswith('/rock.sdf')
+    assert "rock ip=10.0.0.5" in open(out).read()
+
+
 def test_build_remove_argv():
     argv = spawn_core.build_remove_argv('c-track', 'x500', 2)
     assert argv == [
         'gz', 'service', '-s', '/world/c-track/remove',
         '--reqtype', 'gz.msgs.Entity', '--reptype', 'gz.msgs.Boolean',
         '--timeout', '3000', '--req', 'name: "x500_2" type: MODEL']
+
+
+def test_build_set_pose_argv():
+    argv = spawn_core.build_set_pose_argv(
+        'c-track', 'rock', 9, (1.0, -2.0, 0.5), (0.0, 0.0, 0.1, 0.9))
+    assert argv[:3] == ['gz', 'service', '-s']
+    assert argv[3] == '/world/c-track/set_pose'
+    assert '--reqtype' in argv and 'gz.msgs.Pose' in argv
+    req = argv[-1]
+    assert 'name: "rock_9"' in req
+    assert 'position {x: 1.0, y: -2.0, z: 0.5}' in req
+    assert 'orientation {x: 0.0, y: 0.0, z: 0.1, w: 0.9}' in req

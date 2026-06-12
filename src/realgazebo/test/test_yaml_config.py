@@ -24,10 +24,13 @@ def test_parse_vehicles_sorted_by_key():
     assert [s.vehicle_id for s in specs] == [0, 2]
 
 
-def test_parse_vehicles_skips_entries_without_build_target():
+def test_parse_vehicles_prop_without_build_target_gets_none():
+    # props (rock) need no PX4; vehicles keep their resolved target path
     config = {'px4_target': {0: '/p'}, 'vehicles': {
         0: {'type': 'rock', 'spawnpoint': '(0,0,0,0)'},
         1: {'type': 'x500', 'build_target': 0, 'spawnpoint': '(0,0,0,0)'},
     }}
     specs = parse_vehicles(config)
-    assert [s.vehicle_id for s in specs] == [1]
+    assert [s.vehicle_id for s in specs] == [0, 1]
+    assert specs[0].build_target_path is None
+    assert specs[1].build_target_path == '/p'

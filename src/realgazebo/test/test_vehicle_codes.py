@@ -2,7 +2,8 @@ import os
 
 import pytest
 from realgazebo.vehicle_codes import (
-    scan_vehicle_codes, type_for_code, LEGACY_CODE_TO_TYPE)
+    scan_vehicle_codes, type_for_code, code_for_type, is_prop_code,
+    LEGACY_CODE_TO_TYPE)
 
 REPO_MODELS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
 
@@ -60,3 +61,21 @@ def test_type_for_code_legacy_default():
     assert type_for_code(4) == 'ugv_kimm'
     with pytest.raises(ValueError):
         type_for_code(255)
+
+
+def test_code_for_type_reverse_lookup():
+    mapping = {0: 'x500', 201: 'rock'}
+    assert code_for_type('x500', mapping) == 0
+    assert code_for_type('rock', mapping) == 201
+    with pytest.raises(ValueError):
+        code_for_type('boat', mapping)
+
+
+def test_is_prop_code_convention():
+    # 0..199 = PX4 vehicles, >= 200 = static props (201 = rock)
+    assert not is_prop_code(0)
+    assert not is_prop_code(5)
+    assert not is_prop_code(199)
+    assert is_prop_code(200)
+    assert is_prop_code(201)
+    assert is_prop_code(255)

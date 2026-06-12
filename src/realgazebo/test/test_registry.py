@@ -29,3 +29,22 @@ def test_remove():
     assert r.remove('x500', 0) is rec
     assert not r.is_active('x500', 0)
     assert r.remove('x500', 0) is None
+
+
+def test_type_of_finds_holder_across_types():
+    r = VehicleRegistry()
+    r.add('x500', 0)
+    r.add('rock', 9)
+    assert r.type_of(0) == 'x500'
+    assert r.type_of(9) == 'rock'
+    assert r.type_of(7) is None
+    r.remove('rock', 9)
+    assert r.type_of(9) is None
+
+
+def test_record_prop_defaults_false():
+    r = VehicleRegistry()
+    rec = r.add('rock', 9)
+    assert rec.prop is False  # callers opt in explicitly
+    rec.prop = True
+    assert r.get('rock', 9).prop is True
