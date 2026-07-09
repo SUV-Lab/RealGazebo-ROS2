@@ -1,3 +1,5 @@
+import pytest
+
 from realgazebo.entity import Entity
 from realgazebo.yaml_config import VehicleSpec
 from realgazebo import spawn_core
@@ -79,3 +81,35 @@ def test_build_set_pose_argv():
     assert 'name: "rock_9"' in req
     assert 'position {x: 1.0, y: -2.0, z: 0.5}' in req
     assert 'orientation {x: 0.0, y: 0.0, z: 0.1, w: 0.9}' in req
+
+
+def test_build_hitl_command_serial():
+    # HITL: --world and --motors MUST be passed (bridge defaults are wrong)
+    spec = VehicleSpec(0, 'x500', None, (0.0, 0.0, 0.2, 0.0),
+                       mode='hitl', motors=4,
+                       fc_endpoint={'device': '/dev/ttyACM0', 'baud': 921600})
+    argv, env, cwd = spawn_core.build_hitl_command(
+        spec, 'c-track', '/opt/px4', '172.17.0.1', 14550)
+    assert argv == [
+        '/opt/px4/build/px4_sitl_default/bin/gz-hitl-bridge',
+        '--model', 'x500_0', '--world', 'c-track', '--qgc', '172.17.0.1:14550',
+        '--motors', '4', '--device', '/dev/ttyACM0', '--baud', '921600']
+    assert env is None and cwd is None
+
+
+def test_build_hitl_command_udp():
+    spec = VehicleSpec(1, 'x500', None, (0.0, 0.0, 0.2, 0.0),
+                       mode='hitl', motors=4,
+                       fc_endpoint={'udp': '192.168.1.36:14560',
+                                    'local_port': 14541})
+    argv, _, _ = spawn_core.build_hitl_command(
+        spec, 'c-track', '/opt/px4', '172.17.0.1', 14550)
+    assert argv[argv.index('--udp') + 1] == '192.168.1.36:14560'
+    assert argv[argv.index('--local-port') + 1] == '14541'
+    assert '--device' not in argv
+
+
+def test_build_hitl_command_requires_endpoint():
+    spec = VehicleSpec(0, 'x500', None, (0.0, 0.0, 0.2, 0.0), mode='hitl')
+    with pytest.raises(ValueError):
+        spawn_core.build_hitl_command(spec, 'c-track', '/p', '1.2.3.4', 14550)

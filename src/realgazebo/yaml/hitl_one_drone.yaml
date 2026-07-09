@@ -1,0 +1,33 @@
+# hitl_one_drone.yaml
+#
+# One real flight controller (HITL) driving an x500 in the shared gz world,
+# via gz-hitl-bridge. A HITL vehicle differs from a SITL vehicle only by:
+#   - mode: hitl            -> routes to the bridge backend (no PX4 SITL process)
+#   - fc: {device,baud}     -> the real FC's serial link (or udp+local_port)
+#   - motors: 4             -> x500 is a quad (bridge default is 8)
+#   - build_target omitted  -> the bridge binary comes from default_px4_path
+# Everything else (type, spawnpoint, the numeric id key) behaves exactly like
+# a SITL vehicle, so gz name (x500_1), ROS ns (vehicle2), UE num are unchanged.
+#
+# Prereqs on the FC: flash a firmware with pwm_out_sim (RealGazebo-PX4
+# make px4_fmu-v6x_hitl), select the "HIL Quadcopter X" (1001) airframe,
+# and set CBRK_USB_CHK / manual-control params (see RealGazebo-PX4 HITL notes).
+
+px4_target:
+# 0 must still be a RealGazebo-PX4 build (used by any SITL vehicles below).
+  0 : /home/user/realgazebo/RealGazebo-PX4
+
+vehicles:
+# A HITL x500. To mix with SITL vehicles, just add normal entries alongside.
+  0 :
+    type : x500
+    mode : hitl
+    spawnpoint : (0.0, 0.0, 0.2, 0.0)
+    motors : 4
+    fc :
+      device : /dev/ttyACM0     # real FC serial link
+      baud : 921600
+      # --- Ethernet/UDP FC instead of device/baud: ---
+      # udp : 192.168.1.36:14560
+      # local_port : 14540      # unique per HITL vehicle (suggest 14540 + id)
+    sys_id : 1                   # OPTIONAL: must match the FC's MAV_SYS_ID (id + 1)

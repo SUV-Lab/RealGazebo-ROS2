@@ -65,6 +65,46 @@ def build_px4_command(spec, world):
     return argv, env, build_dir
 
 
+def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
+    """Return (argv, env, cwd) for the gz-hitl-bridge process of a HITL vehicle.
+
+    A HITL vehicle has NO PX4 SITL process; a real flight controller runs the
+    firmware and the bridge relays MAVLink HIL between the shared gz model and
+    that FC over serial (device+baud) or Ethernet (udp+local_port). px4_path
+    locates the bridge binary in the PX4 build tree. env/cwd are None so the
+    process inherits the manager's environment (GZ_PARTITION / GZ_IP) and
+    thus sees the shared world's topics.
+
+    Two RealGazebo-specific values that MUST be passed (bridge defaults are
+    wrong here): --world (RealGazebo world is not the bridge default) and
+    --motors (x500 is a quad; bridge defaults to 8).
+    """
+    binary = os.path.join(
+        px4_path, 'build/px4_sitl_default/bin/gz-hitl-bridge')
+    argv = [
+        binary,
+        '--model', f'{spec.vehicle_type}_{spec.vehicle_id}',
+        '--world', world,
+        '--qgc', f'{qgc_host}:{qgc_port}',
+    ]
+    if spec.motors is not None:
+        argv += ['--motors', str(spec.motors)]
+    fc = spec.fc_endpoint or {}
+    if fc.get('device'):
+        argv += ['--device', str(fc['device'])]
+        if fc.get('baud') is not None:
+            argv += ['--baud', str(fc['baud'])]
+    elif fc.get('udp'):
+        argv += ['--udp', str(fc['udp'])]
+        if fc.get('local_port') is not None:
+            argv += ['--local-port', str(fc['local_port'])]
+    else:
+        raise ValueError(
+            f"HITL vehicle {spec.vehicle_type}_{spec.vehicle_id} needs an "
+            f"fc: endpoint (device+baud for serial, or udp+local_port)")
+    return argv, None, None
+
+
 def build_param_argv(spec, name, value):
     binary = os.path.join(
         spec.build_target_path, 'build/px4_sitl_default/bin/px4-param')

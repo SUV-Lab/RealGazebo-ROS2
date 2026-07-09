@@ -9,7 +9,8 @@ import subprocess
 import yaml
 
 from .spawn_core import (
-    render_sdf, build_create_argv, build_px4_command, build_param_argv)
+    render_sdf, build_create_argv, build_px4_command, build_param_argv,
+    build_hitl_command)
 from .vehicle_extras import (
     VEHICLE_CAMERAS, RTSP_PORT, get_sensor_bridges,
     build_image_receiver_argv, build_sensor_bridge_argv)
@@ -137,6 +138,66 @@ class SubprocessBackend:
                     build_param_argv(spec, name, value), check=False, timeout=15)
             except Exception:
                 pass
+
+
+class HitlBackend:
+    """HITL backend: a real flight controller drives the vehicle.
+
+    Same launch()/kill()/alive() contract as SubprocessBackend, but there is
+    NO PX4 SITL process. launch() creates the gz entity (so UE telemetry via
+    libRealGazebo.so and the MulticopterMotorModel joints exist) and Popen's
+    gz-hitl-bridge, which relays MAVLink HIL between the shared gz model and
+    the real FC over serial/UDP, and relays FC<->QGC.
+
+    Runs as a manager-local subprocess in BOTH fleet modes: the manager /
+    gazebo container already has /dev (serial FCs), GZ_PARTITION=realgazebo
+    (shared world) and the host route (QGC), so a HITL vehicle never needs
+    its own container, device passthrough, vehicle-network or DDS. The bridge
+    Popen inherits the manager's env, so GZ_PARTITION / GZ_IP carry through.
+    """
+
+    def __init__(self, px4_path, qgc_host, qgc_port=14550):
+        self._px4_path = px4_path
+        self._qgc_host = qgc_host
+        self._qgc_port = qgc_port
+
+    def launch(self, spec, world, position, rpy, unreal_ip, unreal_port,
+               roster=None):
+        """Create the gz entity and start the bridge; return a kill handle.
+
+        roster is accepted for interface parity and ignored (a HITL vehicle
+        has no PX4 SITL / network_sim participant of its own).
+        """
+        sdf_path = render_sdf(spec.vehicle_type, unreal_ip, unreal_port)
+        subprocess.run(
+            build_create_argv(spec.entity, sdf_path, world, position, rpy),
+            check=True)
+        argv, env, cwd = build_hitl_command(
+            spec, world, self._px4_path, self._qgc_host, self._qgc_port)
+        # start_new_session so the bridge is a killable group; inherit env so
+        # GZ_PARTITION / GZ_IP reach the bridge and it sees the shared world.
+        proc = subprocess.Popen(
+            argv, env=({**os.environ, **env} if env else None), cwd=cwd,
+            start_new_session=True)
+        # Same composite-handle shape as SubprocessBackend (px4 slot holds
+        # the bridge; no extras) so kill()/alive() below and the manager's
+        # crash watcher work unchanged.
+        return types.SimpleNamespace(pid=proc.pid, px4=proc, extras=[])
+
+    def kill(self, handle):
+        """Terminate the bridge process group."""
+        if handle is None:
+            return
+        SubprocessBackend._kill_group(getattr(handle, 'px4', handle))
+
+    def alive(self, handle):
+        """True while the bridge process is still running.
+
+        Note: this tracks the BRIDGE, not the FC. Killing the bridge does not
+        power-cycle the FC, and a bridge crash silently freezes the model.
+        """
+        px4 = getattr(handle, 'px4', handle)
+        return px4 is not None and px4.poll() is None
 
 
 class DockerBackend:

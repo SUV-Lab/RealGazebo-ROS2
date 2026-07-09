@@ -7,6 +7,12 @@ class EntityRecord:
         # container id in docker mode; set right after backend.launch().
         # Stays None for static props (no autopilot stack to manage).
         self.handle = None
+        # which backend materialized this vehicle (SubprocessBackend /
+        # DockerBackend for SITL, HitlBackend for HITL). The crash watcher
+        # and despawn call alive()/kill() on THIS backend, so a mixed
+        # HITL+SITL fleet reaps each vehicle through its own backend.
+        # Stays None for props.
+        self.backend = None
 
     @property
     def prop(self):
