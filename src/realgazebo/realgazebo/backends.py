@@ -77,8 +77,13 @@ class SubprocessBackend:
                         unreal_ip, RTSP_PORT),
                     start_new_session=True))
 
-            search_paths = [
-                os.path.join(spec.build_target_path, 'Tools/simulation/gz/models')]
+            # HITL vehicles have no build_target_path; fall back to the
+            # backend's px4_path (HitlBackend sets _px4_path) for the gz model
+            # search dir used by the lidar sensor bridge.
+            search_base = spec.build_target_path or getattr(self, '_px4_path', None)
+            search_paths = (
+                [os.path.join(search_base, 'Tools/simulation/gz/models')]
+                if search_base else [])
             try:
                 from ament_index_python.packages import get_package_share_directory
                 search_paths.insert(0, os.path.join(
@@ -140,14 +145,17 @@ class SubprocessBackend:
                 pass
 
 
-class HitlBackend:
+class HitlBackend(SubprocessBackend):
     """HITL backend: a real flight controller drives the vehicle.
 
-    Same launch()/kill()/alive() contract as SubprocessBackend, but there is
-    NO PX4 SITL process. launch() creates the gz entity (so UE telemetry via
-    libRealGazebo.so and the MulticopterMotorModel joints exist) and Popen's
-    gz-hitl-bridge, which relays MAVLink HIL between the shared gz model and
-    the real FC over serial/UDP, and relays FC<->QGC.
+    Subclasses SubprocessBackend to reuse its extras (camera receivers +
+    lidar sensor bridge), kill() and alive(), but there is NO PX4 SITL
+    process. launch() creates the gz entity (so UE telemetry via
+    libRealGazebo.so and the MulticopterMotorModel joints exist), starts the
+    same per-vehicle extras as a SITL vehicle (so image_viewer / lidar work
+    identically), and Popen's gz-hitl-bridge, which relays MAVLink HIL
+    between the shared gz model and the real FC over serial/UDP and relays
+    FC<->QGC. No PX4 post-spawn params (the FC owns its own).
 
     Runs as a manager-local subprocess in BOTH fleet modes: the manager /
     gazebo container already has /dev (serial FCs), GZ_PARTITION=realgazebo
@@ -163,7 +171,7 @@ class HitlBackend:
 
     def launch(self, spec, world, position, rpy, unreal_ip, unreal_port,
                roster=None):
-        """Create the gz entity and start the bridge; return a kill handle.
+        """Create the gz entity, its extras, and the bridge; return a handle.
 
         roster is accepted for interface parity and ignored (a HITL vehicle
         has no PX4 SITL / network_sim participant of its own).
@@ -179,25 +187,14 @@ class HitlBackend:
         proc = subprocess.Popen(
             argv, env=({**os.environ, **env} if env else None), cwd=cwd,
             start_new_session=True)
-        # Same composite-handle shape as SubprocessBackend (px4 slot holds
-        # the bridge; no extras) so kill()/alive() below and the manager's
-        # crash watcher work unchanged.
-        return types.SimpleNamespace(pid=proc.pid, px4=proc, extras=[])
-
-    def kill(self, handle):
-        """Terminate the bridge process group."""
-        if handle is None:
-            return
-        SubprocessBackend._kill_group(getattr(handle, 'px4', handle))
-
-    def alive(self, handle):
-        """True while the bridge process is still running.
-
-        Note: this tracks the BRIDGE, not the FC. Killing the bridge does not
-        power-cycle the FC, and a bridge crash silently freezes the model.
-        """
-        px4 = getattr(handle, 'px4', handle)
-        return px4 is not None and px4.poll() is None
+        # Same per-vehicle extras a SITL vehicle gets (camera receivers, lidar
+        # bridge). The image_viewer needs the camera receiver's lifecycle
+        # service to exist, so a HITL vehicle must start these too.
+        extras = self._launch_extras(spec, world, sdf_path, unreal_ip)
+        # Composite handle shape shared with SubprocessBackend (px4 slot holds
+        # the bridge) so the inherited kill()/alive() and the manager's crash
+        # watcher work unchanged.
+        return types.SimpleNamespace(pid=proc.pid, px4=proc, extras=extras)
 
 
 class DockerBackend:
