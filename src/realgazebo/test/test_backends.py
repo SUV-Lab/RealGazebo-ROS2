@@ -6,6 +6,7 @@ import pytest
 
 from realgazebo import backends
 from realgazebo.backends import SubprocessBackend, make_backend
+from realgazebo.entity import Entity
 from realgazebo.yaml_config import VehicleSpec
 
 
@@ -41,7 +42,8 @@ def test_launch_renders_creates_and_boots_px4(monkeypatch, tmp_path):
     airframes = tmp_path / 'ROMFS/px4fmu_common/init.d-posix/airframes'
     airframes.mkdir(parents=True)
     (airframes / '4001_gz_x500').write_text('')
-    spec = VehicleSpec(2, 'x500', str(tmp_path), (1.0, 2.0, 0.5, 0.0))
+    spec = VehicleSpec(2, 'x500', str(tmp_path), (1.0, 2.0, 0.5, 0.0),
+                       entity=Entity('x500', 2, 0))
 
     handle = SubprocessBackend().launch(
         spec, 'c-track', (1.0, 2.0, 0.5), (0.0, 0.0, 0.0), '10.0.0.5', 5005)
@@ -84,7 +86,8 @@ def test_launch_starts_sensor_bridge_for_lidar(monkeypatch, tmp_path):
     airframes = tmp_path / 'ROMFS/px4fmu_common/init.d-posix/airframes'
     airframes.mkdir(parents=True)
     (airframes / '4013_gz_x500_lidar_2d').write_text('')
-    spec = VehicleSpec(2, 'x500_lidar_2d', str(tmp_path), (0.0, 0.0, 0.0, 0.0))
+    spec = VehicleSpec(2, 'x500_lidar_2d', str(tmp_path), (0.0, 0.0, 0.0, 0.0),
+                       entity=Entity('x500_lidar_2d', 2, 5))
 
     SubprocessBackend().launch(
         spec, 'urban', (0, 0, 0), (0, 0, 0), 'h', 5005)

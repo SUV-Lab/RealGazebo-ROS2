@@ -29,8 +29,8 @@ def render_sdf(vehicle_type, unreal_ip, unreal_port,
     return out_path
 
 
-def build_create_argv(vehicle_type, vehicle_id, sdf_path, world, position, rpy):
-    """Build the `ros2 run ros_gz_sim create` argv for one vehicle.
+def build_create_argv(entity, sdf_path, world, position, rpy):
+    """Build the `ros2 run ros_gz_sim create` argv for one entity.
 
     position is (x, y, z) in meters; rpy is (roll, pitch, yaw) in radians.
     """
@@ -39,7 +39,7 @@ def build_create_argv(vehicle_type, vehicle_id, sdf_path, world, position, rpy):
     return [
         'ros2', 'run', 'ros_gz_sim', 'create',
         '-world', world, '-file', sdf_path,
-        '-name', f'{vehicle_type}_{vehicle_id}',
+        '-name', entity.name,
         '-x', str(x), '-y', str(y), '-z', str(z),
         '-R', str(roll), '-P', str(pitch), '-Y', str(yaw),
     ]
@@ -71,22 +71,21 @@ def build_param_argv(spec, name, value):
     return [binary, '--instance', str(spec.vehicle_id), 'set', name, str(value)]
 
 
-def build_remove_argv(world, vehicle_type, vehicle_id):
+def build_remove_argv(world, entity):
     """Build a `gz service` call to remove a spawned model entity by name."""
-    name = f'{vehicle_type}_{vehicle_id}'
     return [
         'gz', 'service', '-s', f'/world/{world}/remove',
         '--reqtype', 'gz.msgs.Entity', '--reptype', 'gz.msgs.Boolean',
-        '--timeout', '3000', '--req', f'name: "{name}" type: MODEL',
+        '--timeout', '3000', '--req', f'name: "{entity.name}" type: MODEL',
     ]
 
 
-def build_set_pose_argv(world, vehicle_type, vehicle_id, position, quaternion):
+def build_set_pose_argv(world, entity, position, quaternion):
     """Build a `gz service` call to teleport an existing entity (prop move).
 
     quaternion is (x, y, z, w) in the Gazebo frame, straight from the wire.
     """
-    name = f'{vehicle_type}_{vehicle_id}'
+    name = entity.name
     x, y, z = position
     qx, qy, qz, qw = quaternion
     req = (f'name: "{name}" '

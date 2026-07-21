@@ -41,7 +41,7 @@ SENSOR_BRIDGE_TYPES = {
 
 # UE cameras streamed per vehicle type. The RTSP path uses the REAL type
 # name ({type}_{id}/{camera}) — since x500_lidar_2d got its own
-# vehicle_code (5), the UE side streams it under its own name too (no
+# type_code (5), the UE side streams it under its own name too (no
 # more remapping to plain x500).
 VEHICLE_CAMERAS = {
     'x500': ['front', 'bottom'],

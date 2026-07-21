@@ -1,8 +1,8 @@
 import os
 
 import pytest
-from realgazebo.vehicle_codes import (
-    scan_vehicle_codes, type_for_code, code_for_type, is_prop_code,
+from realgazebo.type_codes import (
+    scan_type_codes, type_for_code, code_for_type, is_prop_code,
     LEGACY_CODE_TO_TYPE)
 
 REPO_MODELS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
@@ -14,7 +14,7 @@ def _write(tmp_path, rel, code=None):
     body = '<sdf><model>'
     if code is not None:
         body += f'<plugin filename="libRealGazebo.so" name="custom::RealGazebo">' \
-                f'<vehicle_code>{code}</vehicle_code></plugin>'
+                f'<type_code>{code}</type_code></plugin>'
     body += '</model></sdf>'
     path.write_text(body)
 
@@ -24,23 +24,23 @@ def test_scan_basic_and_subdirectory(tmp_path):
     _write(tmp_path, 'boat.sdf.jinja', 2)
     _write(tmp_path, 'rock/rock.sdf.jinja', 201)
     _write(tmp_path, 'world/model.sdf.jinja')  # no code -> skipped
-    assert scan_vehicle_codes(str(tmp_path)) == {
+    assert scan_type_codes(str(tmp_path)) == {
         0: 'x500', 2: 'boat', 201: 'rock'}
 
 
 def test_scan_duplicate_code_shortest_name_wins(tmp_path):
     _write(tmp_path, 'x500_lidar_2d.sdf.jinja', 0)
     _write(tmp_path, 'x500.sdf.jinja', 0)
-    assert scan_vehicle_codes(str(tmp_path)) == {0: 'x500'}
+    assert scan_type_codes(str(tmp_path)) == {0: 'x500'}
 
 
 def test_scan_empty_falls_back_to_legacy(tmp_path):
-    assert scan_vehicle_codes(str(tmp_path)) == LEGACY_CODE_TO_TYPE
+    assert scan_type_codes(str(tmp_path)) == LEGACY_CODE_TO_TYPE
 
 
 def test_scan_golden_against_repo_templates():
     """The real templates must reproduce the wire protocol's code map."""
-    assert scan_vehicle_codes(REPO_MODELS_DIR) == {
+    assert scan_type_codes(REPO_MODELS_DIR) == {
         0: 'x500',
         1: 'rover_ackermann',
         2: 'boat',

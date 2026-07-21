@@ -43,8 +43,7 @@ class SubprocessBackend:
         """
         sdf_path = render_sdf(spec.vehicle_type, unreal_ip, unreal_port)
         subprocess.run(
-            build_create_argv(spec.vehicle_type, spec.vehicle_id, sdf_path,
-                              world, position, rpy),
+            build_create_argv(spec.entity, sdf_path, world, position, rpy),
             check=True)
         argv, px4_env, px4_cwd = build_px4_command(spec, world)
         # start_new_session so PX4 + any children form one killable group

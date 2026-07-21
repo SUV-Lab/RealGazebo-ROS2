@@ -14,10 +14,10 @@ from .yaml_config import parse_vehicles, VehicleSpec
 from .spawn_core import (
     render_sdf, build_create_argv, build_remove_argv, build_set_pose_argv)
 from .backends import make_backend
-from .registry import VehicleRegistry
+from .entity import Entity
+from .registry import EntityRegistry
 from .protocol import parse_packet, DespawnCommand
-from .vehicle_codes import (
-    scan_vehicle_codes, type_for_code, code_for_type, is_prop_code)
+from .type_codes import scan_type_codes, type_for_code
 from .geometry import quat_to_euler
 
 SPAWN_STAGGER_SEC = 0.5
@@ -40,10 +40,10 @@ class ManagerNode(Node):
         self.declare_parameter('docker_gazebo_network', 'gazebo-network')
         self.declare_parameter('docker_vehicle_network', 'vehicle-network')
         self.declare_parameter('mavlink_gcs_ip', '172.17.0.1')
-        self.registry = VehicleRegistry()
+        self.registry = EntityRegistry()
         # code->type map scanned from the model templates (single source of
-        # truth shared with the gz plugin's <vehicle_code> SDF element)
-        self._code_map = scan_vehicle_codes()
+        # truth shared with the gz plugin's <type_code> SDF element)
+        self._code_map = scan_type_codes()
         self.backend = make_backend(
             self.get_parameter('backend').value,
             image=self.get_parameter('docker_image').value,
@@ -53,8 +53,8 @@ class ManagerNode(Node):
             mavlink_gcs_ip=self.get_parameter('mavlink_gcs_ip').value,
             # props are not V2V participants, keep them out of the roster
             roster_fn=lambda: [
-                f'{t}_{i}' for t, i in self.registry.active_ids()
-                if not self.registry.get(t, i).prop],
+                r.entity.name for r in self.registry.records()
+                if not r.entity.is_prop],
         )
         self._spawn_lock = threading.Lock()
         self._clock_seen = False
@@ -78,20 +78,22 @@ class ManagerNode(Node):
         self.get_logger().info("Gazebo /clock detected; starting spawn")
 
     # -- spawn core (one trigger-agnostic path) ---------------------------
-    def _is_prop_type(self, vehicle_type):
-        """True when the type is a static prop (wire code >= 200)."""
-        try:
-            return is_prop_code(code_for_type(vehicle_type, self._code_map))
-        except ValueError:
-            return False
+    def _entity(self, entity_type, entity_id):
+        """Validated identity from the scanned code map.
 
-    def _spawn_one(self, vehicle_type, vehicle_id, position, rpy,
-                   build_target_path, world, roster=None):
+        Raises ValueError for an unknown type — fail-closed, so a typo'd
+        type is rejected here instead of falling through to the PX4
+        backend path (the old _is_prop_type treated unknowns as vehicles).
+        """
+        return Entity.create(entity_type, entity_id, self._code_map)
+
+    def _spawn_one(self, entity, position, rpy, build_target_path, world,
+                   roster=None):
         """Spawn a single vehicle or prop.
 
-        Idempotent: a (type, id) already active is skipped, and an id held
+        Idempotent: an entity already active is skipped, and an id held
         by a DIFFERENT type is refused (the numeric id drives the ROS
-        namespace, MAVLink port and UE num, so it is globally unique).
+        namespace, MAVLink port and UE instance, so it is globally unique).
         Called from both the boot-time YAML loop and the UDP listener
         thread, so the registry mutation is guarded by a lock. roster:
         complete vehicle_models list for network_sim, known upfront for
@@ -99,42 +101,39 @@ class ManagerNode(Node):
         gz entity created (and later removed) by the manager itself.
         """
         with self._spawn_lock:
-            holder = self.registry.type_of(vehicle_id)
-            if holder == vehicle_type:
-                self.get_logger().warn(
-                    f"skip duplicate {vehicle_type}_{vehicle_id}")
+            holder = self.registry.type_of(entity.id)
+            if holder == entity.type:
+                self.get_logger().warn(f"skip duplicate {entity.name}")
                 return
             if holder is not None:
                 self.get_logger().warn(
-                    f"refusing {vehicle_type}_{vehicle_id}: id {vehicle_id} "
+                    f"refusing {entity.name}: id {entity.id} "
                     f"is already active as {holder}")
                 return
-            if self._is_prop_type(vehicle_type):
+            if entity.is_prop:
                 sdf_path = render_sdf(
-                    vehicle_type,
+                    entity.type,
                     self.get_parameter('unreal_ip').value,
                     self.get_parameter('unreal_port').value)
                 subprocess.run(
-                    build_create_argv(vehicle_type, vehicle_id, sdf_path,
-                                      world, position, rpy),
+                    build_create_argv(entity, sdf_path, world, position, rpy),
                     check=True, timeout=30)
-                record = self.registry.add(vehicle_type, vehicle_id)
-                record.prop = True
-                self.get_logger().info(
-                    f"spawned prop {vehicle_type}_{vehicle_id}")
+                self.registry.add(entity)
+                self.get_logger().info(f"spawned prop {entity.name}")
                 return
             spec = VehicleSpec(
-                vehicle_id, vehicle_type, build_target_path,
-                (position[0], position[1], position[2], rpy[2]))
+                entity.id, entity.type, build_target_path,
+                (position[0], position[1], position[2], rpy[2]),
+                entity=entity)
             handle = self.backend.launch(
                 spec, world, position, rpy,
                 self.get_parameter('unreal_ip').value,
                 self.get_parameter('unreal_port').value,
                 roster=roster)
-            record = self.registry.add(vehicle_type, vehicle_id)
+            record = self.registry.add(entity)
             record.handle = handle
             self.get_logger().info(
-                f"spawned {vehicle_type}_{vehicle_id} "
+                f"spawned {entity.name} "
                 f"(handle {getattr(handle, 'pid', handle)})")
 
     # -- lifecycle watching -------------------------------------------------
@@ -144,17 +143,17 @@ class ManagerNode(Node):
         world = self.get_parameter('world').value
         with self._spawn_lock:
             # props have no autopilot process/container to die - skip them
-            dead = [(t, i) for t, i in self.registry.active_ids()
-                    if not self.registry.get(t, i).prop
-                    and not self.backend.alive(self.registry.get(t, i).handle)]
-            for key in dead:
-                self.registry.remove(*key)
-        for vehicle_type, vehicle_id in dead:
+            dead = [r for r in self.registry.records()
+                    if not r.entity.is_prop
+                    and not self.backend.alive(r.handle)]
+            for record in dead:
+                self.registry.remove(record.entity.type, record.entity.id)
+        for record in dead:
             self.get_logger().warn(
-                f"{vehicle_type}_{vehicle_id} died unexpectedly; "
+                f"{record.entity.name} died unexpectedly; "
                 f"cleaning up its model and freeing the id")
             subprocess.run(
-                build_remove_argv(world, vehicle_type, vehicle_id),
+                build_remove_argv(world, record.entity),
                 check=False, timeout=10)
 
     def cleanup_leftovers(self):
@@ -185,31 +184,39 @@ class ManagerNode(Node):
             return
         with open(yaml_path) as f:
             config = yaml.safe_load(f)
-        specs = parse_vehicles(config)
+        # Validate identities upfront: a typo'd type is dropped with an
+        # error (and stays out of the roster) instead of killing the boot.
+        pending = []
+        for spec in parse_vehicles(config):
+            try:
+                pending.append((self._entity(spec.vehicle_type,
+                                             spec.vehicle_id), spec))
+            except ValueError as exc:
+                self.get_logger().error(
+                    f"boot spawn skipped for "
+                    f"{spec.vehicle_type}_{spec.vehicle_id}: {exc}")
         # The full fleet is known upfront, so every vehicle gets the complete
         # network_sim roster (matches what generate_compose.py used to bake).
         # Props are not V2V participants and stay out of it.
-        roster = sorted(f'{s.vehicle_type}_{s.vehicle_id}' for s in specs
-                        if not self._is_prop_type(s.vehicle_type))
-        for spec in specs:
+        roster = sorted(e.name for e, _ in pending if not e.is_prop)
+        for entity, spec in pending:
             x, y, z, yaw = spec.spawnpoint
             try:
-                self._spawn_one(spec.vehicle_type, spec.vehicle_id, (x, y, z),
-                                (0.0, 0.0, yaw), spec.build_target_path, world,
-                                roster=roster)
+                self._spawn_one(entity, (x, y, z), (0.0, 0.0, yaw),
+                                spec.build_target_path, world, roster=roster)
             except Exception as exc:
                 # One failed vehicle (e.g. its MAVLink host port is taken)
                 # must not kill the whole boot — log and keep going.
                 self.get_logger().error(
-                    f"boot spawn failed for "
-                    f"{spec.vehicle_type}_{spec.vehicle_id}: {exc}")
+                    f"boot spawn failed for {entity.name}: {exc}")
             time.sleep(SPAWN_STAGGER_SEC)
         self.get_logger().info(
-            f"spawn complete: {[f'{t}_{i}' for t, i in self.registry.active_ids()]}")
+            f"spawn complete: "
+            f"{[r.entity.name for r in self.registry.records()]}")
 
     # -- runtime UDP trigger ----------------------------------------------
     def start_udp_listener(self):
-        self.get_logger().info(f"vehicle codes: {self._code_map}")
+        self.get_logger().info(f"entity type codes: {self._code_map}")
         port = self.get_parameter('spawn_udp_port').value
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -257,8 +264,8 @@ class ManagerNode(Node):
             for idx, cmd in enumerate(cmds):
                 if not isinstance(cmd, DespawnCommand) and any(
                         not isinstance(later, DespawnCommand)
-                        and later.vehicle_num == cmd.vehicle_num
-                        and later.vehicle_code == cmd.vehicle_code
+                        and later.entity_id == cmd.entity_id
+                        and later.type_code == cmd.type_code
                         for later in cmds[idx + 1:]):
                     continue  # superseded by a newer pose for the same entity
                 self._handle_command(cmd, world, default_px4)
@@ -266,48 +273,45 @@ class ManagerNode(Node):
     def _handle_command(self, cmd, world, default_px4):
         """Act on one parsed wire command (runs on the UDP listener thread)."""
         try:
-            vehicle_type = type_for_code(cmd.vehicle_code, self._code_map)
+            entity = Entity(type_for_code(cmd.type_code, self._code_map),
+                            cmd.entity_id, cmd.type_code)
         except ValueError as exc:
             self.get_logger().warn(str(exc))
             return
         # id/type validation: the packet's code must match whatever type
-        # currently holds the num - a mismatch is a sender bug, and acting
+        # currently holds the id - a mismatch is a sender bug, and acting
         # on it would collide ports/namespaces or hit the wrong entity, so
         # the packet is dropped loudly.
-        holder = self.registry.type_of(cmd.vehicle_num)
-        if holder is not None and holder != vehicle_type:
+        holder = self.registry.type_of(entity.id)
+        if holder is not None and holder != entity.type:
             self.get_logger().warn(
-                f"dropped packet: id {cmd.vehicle_num} is active as "
-                f"{holder}, but the packet says {vehicle_type}")
+                f"dropped packet: id {entity.id} is active as "
+                f"{holder}, but the packet says {entity.type}")
             return
         if isinstance(cmd, DespawnCommand):
-            self.get_logger().info(
-                f"UDP despawn: {vehicle_type}_{cmd.vehicle_num}")
+            self.get_logger().info(f"UDP despawn: {entity.name}")
             try:
-                self._despawn_one(vehicle_type, cmd.vehicle_num, world)
+                self._despawn_one(entity, world)
             except Exception as exc:
                 self.get_logger().error(f"despawn failed: {exc}")
             return
-        if holder is not None and self._is_prop_type(vehicle_type):
+        if holder is not None and entity.is_prop:
             # upsert: MSG_POSE for an active prop means MOVE (mirrors the
-            # gz->UE direction, where a known num is a pose update)
+            # gz->UE direction, where a known id is a pose update)
             try:
-                self._move_prop(vehicle_type, cmd.vehicle_num,
-                                cmd.position, cmd.quaternion, world)
+                self._move_prop(entity, cmd.position, cmd.quaternion, world)
             except Exception as exc:
                 self.get_logger().error(f"move failed: {exc}")
             return
         rpy = quat_to_euler(*cmd.quaternion)
         self.get_logger().info(
-            f"UDP spawn: {vehicle_type}_{cmd.vehicle_num} at {cmd.position}")
+            f"UDP spawn: {entity.name} at {cmd.position}")
         try:
-            self._spawn_one(vehicle_type, cmd.vehicle_num, cmd.position,
-                            rpy, default_px4, world)
+            self._spawn_one(entity, cmd.position, rpy, default_px4, world)
         except Exception as exc:
             self.get_logger().error(f"spawn failed: {exc}")
 
-    def _move_prop(self, vehicle_type, vehicle_id, position, quaternion,
-                   world):
+    def _move_prop(self, entity, position, quaternion, world):
         """Teleport an active prop.
 
         No explicit rate limit: the batch drain in _udp_loop collapses a
@@ -315,30 +319,28 @@ class ManagerNode(Node):
         service call itself paces this naturally.
         """
         proc = subprocess.run(
-            build_set_pose_argv(world, vehicle_type, vehicle_id,
-                                position, quaternion),
+            build_set_pose_argv(world, entity, position, quaternion),
             capture_output=True, timeout=5)
         if proc.returncode != 0:
             self.get_logger().warn(
-                f"move failed for {vehicle_type}_{vehicle_id}: "
+                f"move failed for {entity.name}: "
                 f"{proc.stderr.decode(errors='replace').strip()}")
 
-    def _despawn_one(self, vehicle_type, vehicle_id, world):
-        """Tear down the vehicle via the backend and remove its gz model."""
+    def _despawn_one(self, entity, world):
+        """Tear down the entity via the backend and remove its gz model."""
         with self._spawn_lock:
-            if not self.registry.is_active(vehicle_type, vehicle_id):
-                self.get_logger().warn(
-                    f"despawn: {vehicle_type}_{vehicle_id} not active")
+            if not self.registry.is_active(entity.type, entity.id):
+                self.get_logger().warn(f"despawn: {entity.name} not active")
                 return
-            record = self.registry.remove(vehicle_type, vehicle_id)
+            record = self.registry.remove(entity.type, entity.id)
         if not record.prop:
             self.backend.kill(record.handle)
         # Model removal is manager-side in every mode: killing the autopilot
         # stack (process or container) never removes the gz entity.
         subprocess.run(
-            build_remove_argv(world, vehicle_type, vehicle_id),
+            build_remove_argv(world, entity),
             check=False, timeout=10)
-        self.get_logger().info(f"despawned {vehicle_type}_{vehicle_id}")
+        self.get_logger().info(f"despawned {entity.name}")
 
     def shutdown(self):
         self._stop = True
@@ -348,13 +350,13 @@ class ManagerNode(Node):
         # manager: PX4 runs in its own process group (or container), so a
         # plain Ctrl+C would otherwise leave orphans behind.
         world = self.get_parameter('world').value
-        for vehicle_type, vehicle_id in self.registry.active_ids():
+        for record in self.registry.records():
             try:
-                self._despawn_one(vehicle_type, vehicle_id, world)
+                self._despawn_one(record.entity, world)
             except Exception as exc:
                 self.get_logger().warn(
                     f"shutdown teardown failed for "
-                    f"{vehicle_type}_{vehicle_id}: {exc}")
+                    f"{record.entity.name}: {exc}")
 
 
 def main(args=None):

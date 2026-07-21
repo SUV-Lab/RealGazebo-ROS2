@@ -47,8 +47,8 @@ GZ_ADD_PLUGIN(
 )
 
 RealGazebo::RealGazebo() :
-	vehicle_num_(0),
-	vehicle_code_(255),
+	entity_id_(0),
+	type_code_(255),
 	sock_unreal_(-1),
 	num_motor_joint_(0),
 	num_moveable_link_(0),
@@ -102,11 +102,11 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 		
 		size_t underscore_pos = model_name.find_last_of('_');
 		if (underscore_pos != std::string::npos) {
-			vehicle_type_ = model_name.substr(0, underscore_pos);
-			vehicle_num_ = static_cast<uint8_t>(std::stoi(model_name.substr(underscore_pos + 1)));
+			entity_type_ = model_name.substr(0, underscore_pos);
+			entity_id_ = static_cast<uint8_t>(std::stoi(model_name.substr(underscore_pos + 1)));
 		} else {
-			vehicle_type_ = "iris";
-			vehicle_num_ = 0;
+			entity_type_ = "iris";
+			entity_id_ = 0;
 		}
 	}
 	
@@ -122,13 +122,13 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 		unreal_port_ = 5555;
 	}
 
-	// Wire vehicle code: prefer the SDF declaration so adding a new vehicle
+	// Wire type code: prefer the SDF declaration so adding a new entity
 	// type does not require recompiling this plugin; fall back to the legacy
 	// hardcoded map for SDFs that do not declare one.
-	if (_sdf->HasElement("vehicle_code")) {
-		vehicle_code_ = static_cast<uint8_t>(_sdf->Get<int>("vehicle_code"));
+	if (_sdf->HasElement("type_code")) {
+		type_code_ = static_cast<uint8_t>(_sdf->Get<int>("type_code"));
 	} else {
-		vehicle_code_ = getVehicleCode(vehicle_type_);
+		type_code_ = getTypeCode(entity_type_);
 	}
 
 	setupSendSocket(sock_unreal_, addr_unreal_, unreal_port_);
@@ -175,7 +175,7 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 	}
 	num_moveable_link_ = idx;
 	
-	gzmsg << "RealGazebo Model Plugin: Loaded for " << vehicle_type_ << "_" << static_cast<int>(vehicle_num_)
+	gzmsg << "RealGazebo Model Plugin: Loaded for " << entity_type_ << "_" << static_cast<int>(entity_id_)
 	      << " with " << num_motor_joint_ << " motors and " << num_moveable_link_ << " moveable links." << std::endl;
 
 	// Initialize ROS2, if it has not already been initialized
@@ -186,11 +186,13 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 	}
 
 	// Create ROS2 node
-	std::string model_name_str = vehicle_type_ + "_" + std::to_string(static_cast<int>(vehicle_num_));
+	std::string model_name_str = entity_type_ + "_" + std::to_string(static_cast<int>(entity_id_));
 	ros_node_ = rclcpp::Node::make_shared("realgazebo_" + model_name_str);
 
 	// Get ROS2 topic names for subscriptions
-	std::string vehicle_namespace = "/vehicle" + std::to_string(static_cast<int>(vehicle_num_) + 1);
+	// ROS namespaces are 1-based, unlike the 0-based entity_id_: /vehicle1
+	// belongs to entity_id_ 0.
+	std::string vehicle_namespace = "/vehicle" + std::to_string(static_cast<int>(entity_id_) + 1);
 
 	if (_sdf->HasElement("BatteryStatusTopic")) {
 		battery_status_topic_ = _sdf->Get<std::string>("BatteryStatusTopic");
@@ -245,8 +247,8 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 		std::vector<uint8_t> pose_buffer(pose_payload_size);
 		
 		RealGazeboPacketHeader* pose_header = reinterpret_cast<RealGazeboPacketHeader*>(pose_buffer.data());
-		pose_header->vehicle_num = vehicle_num_;
-		pose_header->vehicle_code = vehicle_code_;
+		pose_header->entity_id = entity_id_;
+		pose_header->type_code = type_code_;
 		pose_header->data_type = 1;
 		
 		float pose_values[7] = {
@@ -264,8 +266,8 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 			std::vector<uint8_t> rpm_buffer(rpm_payload_size);
 			
 			RealGazeboPacketHeader* rpm_header = reinterpret_cast<RealGazeboPacketHeader*>(rpm_buffer.data());
-			rpm_header->vehicle_num = vehicle_num_;
-			rpm_header->vehicle_code = vehicle_code_;
+			rpm_header->entity_id = entity_id_;
+			rpm_header->type_code = type_code_;
 			rpm_header->data_type = 2;
 			
 			float* rpm_data_ptr = reinterpret_cast<float*>(rpm_buffer.data() + sizeof(RealGazeboPacketHeader));
@@ -288,8 +290,8 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 			std::vector<uint8_t> moveable_buffer(moveable_payload_size);
 			
 			RealGazeboPacketHeader* moveable_header = reinterpret_cast<RealGazeboPacketHeader*>(moveable_buffer.data());
-			moveable_header->vehicle_num = vehicle_num_;
-			moveable_header->vehicle_code = vehicle_code_;
+			moveable_header->entity_id = entity_id_;
+			moveable_header->type_code = type_code_;
 			moveable_header->data_type = 3;
 			
 			float* moveable_data_ptr = reinterpret_cast<float*>(moveable_buffer.data() + sizeof(RealGazeboPacketHeader));
@@ -333,8 +335,8 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 			std::vector<uint8_t> additional_buffer(additional_payload_size);
 
 			RealGazeboPacketHeader* additional_header = reinterpret_cast<RealGazeboPacketHeader*>(additional_buffer.data());
-			additional_header->vehicle_num = vehicle_num_;
-			additional_header->vehicle_code = vehicle_code_;
+			additional_header->entity_id = entity_id_;
+			additional_header->type_code = type_code_;
 			additional_header->data_type = 5;
 
 			std::memcpy(additional_buffer.data() + sizeof(RealGazeboPacketHeader), &battery_remaining, sizeof(float));
@@ -348,14 +350,14 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 	counter_++;
 }
 
-uint8_t RealGazebo::getVehicleCode(const std::string &vehicle_type) const
+uint8_t RealGazebo::getTypeCode(const std::string &entity_type) const
 {
-	if (vehicle_type == "x500" || vehicle_type == "x500_lidar_2d") return 0;
-	else if (vehicle_type == "rover_ackermann") return 1;
-	else if (vehicle_type == "boat") return 2;
-	else if (vehicle_type == "lc_62") return 3;
-	else if (vehicle_type == "ugv_kimm") return 4;
-	else if (vehicle_type == "rock") return 201;
+	if (entity_type == "x500" || entity_type == "x500_lidar_2d") return 0;
+	else if (entity_type == "rover_ackermann") return 1;
+	else if (entity_type == "boat") return 2;
+	else if (entity_type == "lc_62") return 3;
+	else if (entity_type == "ugv_kimm") return 4;
+	else if (entity_type == "rock") return 201;
 	else return 255;
 }
 
@@ -397,8 +399,8 @@ void RealGazebo::sendResetMessage()
 	std::vector<uint8_t> buffer(payload_size);
 
 	RealGazeboPacketHeader* header = reinterpret_cast<RealGazeboPacketHeader*>(buffer.data());
-	header->vehicle_num = vehicle_num_;
-	header->vehicle_code = vehicle_code_;
+	header->entity_id = entity_id_;
+	header->type_code = type_code_;
 	header->data_type = 4;
 
 	sendto(sock_unreal_, buffer.data(), payload_size, 0,

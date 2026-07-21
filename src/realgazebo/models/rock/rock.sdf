@@ -42,6 +42,7 @@
     <plugin filename="libRealGazebo.so" name="custom::RealGazebo">
       <unreal_ip>127.0.0.1</unreal_ip>
       <unreal_port>5005</unreal_port>
+      <type_code>201</type_code>
     </plugin>
   </model>
 </sdf>

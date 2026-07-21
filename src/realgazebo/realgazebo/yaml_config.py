@@ -8,6 +8,9 @@ class VehicleSpec:
     vehicle_type: str
     build_target_path: str
     spawnpoint: tuple  # (x, y, z, yaw) floats
+    # Entity identity attached by the manager after code-map validation;
+    # None straight out of parse_vehicles (the parser stays code-map-free).
+    entity: object = None
 
 
 def parse_vehicles(config: dict) -> list:

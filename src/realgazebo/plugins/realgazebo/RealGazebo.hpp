@@ -73,8 +73,8 @@
 
 #pragma pack(push, 1)
 struct RealGazeboPacketHeader {
-  uint8_t vehicle_num;
-  uint8_t vehicle_code;
+  uint8_t entity_id;
+  uint8_t type_code;
   uint8_t data_type;
 };
 #pragma pack(pop)
@@ -108,7 +108,7 @@ private:
 	/// \brief Callback for ROS2 VehicleStatus subscription
 	void VehicleStatusCallback(const px4_msgs::msg::VehicleStatus::SharedPtr msg);
 
-	uint8_t getVehicleCode(const std::string &vehicle_type) const;
+	uint8_t getTypeCode(const std::string &entity_type) const;
 
 	void setupSendSocket(int &sock, struct sockaddr_in &addr, int port);
 
@@ -117,9 +117,9 @@ private:
 	gz::sim::Entity model_entity_;
 	gz::sim::Model model_;
 	
-	std::string vehicle_type_;
-	uint8_t vehicle_num_;
-	uint8_t vehicle_code_;
+	std::string entity_type_;
+	uint8_t entity_id_;
+	uint8_t type_code_;
 	
 	std::string unreal_ip_;
 	int unreal_port_;

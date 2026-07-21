@@ -1,10 +1,12 @@
+from realgazebo.entity import Entity
 from realgazebo.yaml_config import VehicleSpec
 from realgazebo import spawn_core
 
 
 def test_build_create_argv():
     argv = spawn_core.build_create_argv(
-        'x500', 3, '/tmp/models/x500.sdf', 'c-track', (1.0, 2.0, 3.0), (0.0, 0.0, 0.5))
+        Entity('x500', 3, 0), '/tmp/models/x500.sdf', 'c-track',
+        (1.0, 2.0, 3.0), (0.0, 0.0, 0.5))
     assert argv == [
         'ros2', 'run', 'ros_gz_sim', 'create',
         '-world', 'c-track', '-file', '/tmp/models/x500.sdf',
@@ -59,7 +61,7 @@ def test_render_sdf_nested_obstacle_template(tmp_path):
 
 
 def test_build_remove_argv():
-    argv = spawn_core.build_remove_argv('c-track', 'x500', 2)
+    argv = spawn_core.build_remove_argv('c-track', Entity('x500', 2, 0))
     assert argv == [
         'gz', 'service', '-s', '/world/c-track/remove',
         '--reqtype', 'gz.msgs.Entity', '--reptype', 'gz.msgs.Boolean',
@@ -68,7 +70,8 @@ def test_build_remove_argv():
 
 def test_build_set_pose_argv():
     argv = spawn_core.build_set_pose_argv(
-        'c-track', 'rock', 9, (1.0, -2.0, 0.5), (0.0, 0.0, 0.1, 0.9))
+        'c-track', Entity('rock', 9, 201), (1.0, -2.0, 0.5),
+        (0.0, 0.0, 0.1, 0.9))
     assert argv[:3] == ['gz', 'service', '-s']
     assert argv[3] == '/world/c-track/set_pose'
     assert '--reqtype' in argv and 'gz.msgs.Pose' in argv

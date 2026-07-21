@@ -2,17 +2,17 @@ import struct
 from collections import namedtuple
 
 # RealGazebo UDP wire protocol (must match the gz plugin / UE side).
-# Header: vehicle_num(u8), vehicle_code(u8), message_id(u8).
-# vehicle_code 0..199 = PX4 vehicles, >= 200 = static props/obstacles
-# (see vehicle_codes.PROP_CODE_MIN).
+# Header: entity_id(u8), type_code(u8), message_id(u8).
+# type_code 0..199 = PX4 vehicles, >= 200 = static props/obstacles
+# (see type_codes.PROP_CODE_MIN).
 HEADER_SIZE = 3
 # Pose packet, reused inbound (UE -> manager) as an UPSERT:
-#  - num unknown            -> SPAWN (vehicle or prop)
-#  - num active, same code  -> prop: MOVE (set_pose); vehicle: ignored
-#  - num active, other code -> dropped (sender bug; ids are global)
+#  - id unknown            -> SPAWN (vehicle or prop)
+#  - id active, same code  -> prop: MOVE (set_pose); vehicle: ignored
+#  - id active, other code -> dropped (sender bug; ids are global)
 MSG_POSE = 1
 # Destroy packet, reused as the inbound DESPAWN command. The same
-# code-vs-holder validation applies: a num active under another code
+# code-vs-holder validation applies: an id active under another code
 # is dropped, never despawned.
 MSG_DESTROY = 4
 
@@ -21,8 +21,8 @@ MSG_DESTROY = 4
 _POSE = struct.Struct('<7f')
 
 SpawnCommand = namedtuple(
-    'SpawnCommand', ['vehicle_num', 'vehicle_code', 'position', 'quaternion'])
-DespawnCommand = namedtuple('DespawnCommand', ['vehicle_num', 'vehicle_code'])
+    'SpawnCommand', ['entity_id', 'type_code', 'position', 'quaternion'])
+DespawnCommand = namedtuple('DespawnCommand', ['entity_id', 'type_code'])
 
 
 def parse_packet(data: bytes):
@@ -33,24 +33,24 @@ def parse_packet(data: bytes):
     """
     if len(data) < HEADER_SIZE:
         raise ValueError("packet shorter than header")
-    vehicle_num, vehicle_code, message_id = data[0], data[1], data[2]
+    entity_id, type_code, message_id = data[0], data[1], data[2]
     if message_id == MSG_POSE:
         payload = data[HEADER_SIZE:]
         if len(payload) < _POSE.size:
             raise ValueError("MessageID=1 payload too short for pose")
         x, y, z, qx, qy, qz, qw = _POSE.unpack(payload[:_POSE.size])
-        return SpawnCommand(vehicle_num, vehicle_code, (x, y, z), (qx, qy, qz, qw))
+        return SpawnCommand(entity_id, type_code, (x, y, z), (qx, qy, qz, qw))
     if message_id == MSG_DESTROY:
-        return DespawnCommand(vehicle_num, vehicle_code)
+        return DespawnCommand(entity_id, type_code)
     return None
 
 
-def pack_pose(vehicle_num, vehicle_code, position, quaternion) -> bytes:
+def pack_pose(entity_id, type_code, position, quaternion) -> bytes:
     """Build a MessageID=1 pose packet (used by tests and golden vectors)."""
-    return bytes([vehicle_num, vehicle_code, MSG_POSE]) + _POSE.pack(
+    return bytes([entity_id, type_code, MSG_POSE]) + _POSE.pack(
         *position, *quaternion)
 
 
-def pack_destroy(vehicle_num, vehicle_code) -> bytes:
+def pack_destroy(entity_id, type_code) -> bytes:
     """Build a MessageID=4 destroy packet (used by tests)."""
-    return bytes([vehicle_num, vehicle_code, MSG_DESTROY])
+    return bytes([entity_id, type_code, MSG_DESTROY])
