@@ -15,20 +15,20 @@ class ImageSubscriber(Node):
 
     def __init__(self):
         super().__init__('image_viewer')
-        self.declare_parameter('vehicle_num', 0)
+        self.declare_parameter('vehicle_id', 0)
         self.declare_parameter('vehicle_type', 'x500')
         self.declare_parameter('camera_type', 'front')
 
-        self.vehicle_num = self.get_parameter('vehicle_num').get_parameter_value().integer_value
+        self.vehicle_id = self.get_parameter('vehicle_id').get_parameter_value().integer_value
         self.vehicle_type = self.get_parameter('vehicle_type').get_parameter_value().string_value
         self.camera_type = self.get_parameter('camera_type').get_parameter_value().string_value
 
         self.get_logger().info(
-            f"Configure ImageViewer {self.vehicle_type}_{self.vehicle_num} camera={self.camera_type}"
+            f"Configure ImageViewer {self.vehicle_type}_{self.vehicle_id} camera={self.camera_type}"
         )
 
         receiver_node_name = (
-            f'image_receiver_{self.vehicle_type}_{self.vehicle_num}_{self.camera_type}'
+            f'image_receiver_{self.vehicle_type}_{self.vehicle_id}_{self.camera_type}'
         )
         self.cli = self.create_client(ChangeState, f'/{receiver_node_name}/change_state')
         if not self.cli.wait_for_service(timeout_sec=10.0):
@@ -54,8 +54,10 @@ class ImageSubscriber(Node):
         elif current_state == State.PRIMARY_STATE_ACTIVE:
             self.get_logger().info('image_receiver already active, skipping lifecycle setup')
 
+        # ROS namespaces are 1-based, unlike the 0-based vehicle_id:
+        # /vehicle1 belongs to vehicle_id 0.
         topic = (
-            f'/vehicle{self.vehicle_num + 1}'
+            f'/vehicle{self.vehicle_id + 1}'
             f'/camera/{self.camera_type}/image_raw'
         )
         self.subscription = self.create_subscription(
@@ -90,7 +92,7 @@ class ImageSubscriber(Node):
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
             cv2.imshow(
-                f"vehicle{self.vehicle_num + 1}/{self.camera_type}",
+                f"vehicle{self.vehicle_id + 1}/{self.camera_type}",
                 frame,
             )
             cv2.waitKey(1)

@@ -61,12 +61,14 @@ def get_sensor_bridges(vehicle_type, vehicle_id, world, model_search_paths=None)
         return []
 
     bridges = []
-    vehicle_num = vehicle_id + 1
+    # ROS namespaces are 1-based, unlike the 0-based vehicle_id: /vehicle1
+    # belongs to vehicle_id 0. Kept as a separate name so the two never blur.
+    ros_index = vehicle_id + 1
 
     def add_entries(link_name, sensor_name, sensor_type):
         for suffix, ros_type, gz_type in SENSOR_BRIDGE_TYPES.get(sensor_type, []):
             bridges.append({
-                'ros_topic_name': f'/vehicle{vehicle_num}/{suffix}',
+                'ros_topic_name': f'/vehicle{ros_index}/{suffix}',
                 'gz_topic_name': f'/world/{world}/model/{vehicle_type}_{vehicle_id}/link/{link_name}/sensor/{sensor_name}/{suffix}',
                 'ros_type_name': ros_type,
                 'gz_type_name': gz_type,
