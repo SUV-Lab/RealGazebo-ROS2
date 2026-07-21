@@ -12,15 +12,14 @@ def test_roundtrip_pose():
 
 
 def test_golden_vector():
-    # vehicle_num=2, vehicle_code=0 (x500), pos=(0,0,0), quat=identity
-    # header bytes 02 00 01, then 6x f32 0.0 and f32 1.0 (little-endian)
+    # byte 0 = instance id (2), byte 1 = type code (0 = x500), byte 2 = MSG_POSE,
+    # then 6x f32 0.0 and f32 1.0 (little-endian)
     expected = bytes([2, 0, 1]) + struct.pack('<7f', 0, 0, 0, 0, 0, 0, 1.0)
     assert pack_pose(2, 0, (0, 0, 0), (0, 0, 0, 1.0)) == expected
-    cmd = parse_packet(expected)
-    assert cmd.vehicle_num == 2
-    assert cmd.vehicle_code == 0
-    assert cmd.position == (0.0, 0.0, 0.0)
-    assert cmd.quaternion == (0.0, 0.0, 0.0, 1.0)
+    # Asserted positionally, never by field name: this pins the wire layout
+    # itself, so a rename of the header fields cannot quietly change it.
+    assert tuple(parse_packet(expected)) == (
+        2, 0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))
 
 
 def test_non_pose_message_returns_none():
