@@ -100,12 +100,20 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 	if (model_name_comp) {
 		std::string model_name = model_name_comp->Data();
 		
+		// Model names follow the '{type}_{id}' convention. A name without a
+		// numeric suffix keeps its full name as the type with id 0 (no more
+		// silent fallback to a fictional "iris" type).
 		size_t underscore_pos = model_name.find_last_of('_');
-		if (underscore_pos != std::string::npos) {
+		std::string suffix = (underscore_pos != std::string::npos)
+			? model_name.substr(underscore_pos + 1) : "";
+		if (!suffix.empty() &&
+		    suffix.find_first_not_of("0123456789") == std::string::npos) {
 			entity_type_ = model_name.substr(0, underscore_pos);
-			entity_id_ = static_cast<uint8_t>(std::stoi(model_name.substr(underscore_pos + 1)));
+			entity_id_ = static_cast<uint8_t>(std::stoi(suffix));
 		} else {
-			entity_type_ = "iris";
+			gzwarn << "RealGazebo: model name '" << model_name
+			       << "' has no numeric _<id> suffix; using id 0" << std::endl;
+			entity_type_ = model_name;
 			entity_id_ = 0;
 		}
 	}
@@ -122,13 +130,19 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 		unreal_port_ = 5555;
 	}
 
-	// Wire type code: prefer the SDF declaration so adding a new entity
-	// type does not require recompiling this plugin; fall back to the legacy
-	// hardcoded map for SDFs that do not declare one.
+	// Wire type code: the SDF <type_code> element is the single source of
+	// truth (the manager scans the same element). No hardcoded fallback:
+	// a model without it fails loudly here and the plugin stays inert,
+	// instead of streaming under a silently wrong code.
 	if (_sdf->HasElement("type_code")) {
 		type_code_ = static_cast<uint8_t>(_sdf->Get<int>("type_code"));
 	} else {
-		type_code_ = getTypeCode(entity_type_);
+		gzerr << "RealGazebo: model '" << entity_type_ << "_"
+		      << static_cast<int>(entity_id_)
+		      << "' declares no <type_code>; plugin disabled (add "
+		      << "<type_code> to the model's RealGazebo plugin block)"
+		      << std::endl;
+		return;
 	}
 
 	setupSendSocket(sock_unreal_, addr_unreal_, unreal_port_);
@@ -224,6 +238,12 @@ void RealGazebo::Configure(const gz::sim::Entity &_entity,
 void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 				       const gz::sim::EntityComponentManager &_ecm)
 {
+	// Inert when Configure aborted (e.g. missing <type_code>): no socket,
+	// no ROS node, nothing to stream.
+	if (sock_unreal_ < 0) {
+		return;
+	}
+
 	// Spin ROS2 to process callbacks
 	if (ros_node_ && rclcpp::ok()) {
 		rclcpp::spin_some(ros_node_);
@@ -348,17 +368,6 @@ void RealGazebo::PostUpdate(const gz::sim::UpdateInfo &_info,
 	}
 
 	counter_++;
-}
-
-uint8_t RealGazebo::getTypeCode(const std::string &entity_type) const
-{
-	if (entity_type == "x500" || entity_type == "x500_lidar_2d") return 0;
-	else if (entity_type == "rover_ackermann") return 1;
-	else if (entity_type == "boat") return 2;
-	else if (entity_type == "lc_62") return 3;
-	else if (entity_type == "ugv_kimm") return 4;
-	else if (entity_type == "rock") return 201;
-	else return 255;
 }
 
 void RealGazebo::setupSendSocket(int &sock, struct sockaddr_in &addr, int port)

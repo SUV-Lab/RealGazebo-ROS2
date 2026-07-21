@@ -2,8 +2,7 @@ import os
 
 import pytest
 from realgazebo.type_codes import (
-    scan_type_codes, type_for_code, code_for_type, is_prop_code,
-    LEGACY_CODE_TO_TYPE)
+    scan_type_codes, type_for_code, code_for_type, is_prop_code)
 
 REPO_MODELS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
 
@@ -34,8 +33,12 @@ def test_scan_duplicate_code_shortest_name_wins(tmp_path):
     assert scan_type_codes(str(tmp_path)) == {0: 'x500'}
 
 
-def test_scan_empty_falls_back_to_legacy(tmp_path):
-    assert scan_type_codes(str(tmp_path)) == LEGACY_CODE_TO_TYPE
+def test_scan_empty_raises(tmp_path):
+    # templates are the single source of truth: a checkout with no
+    # <type_code> declarations must fail loudly at manager startup, not
+    # fall back to a silently divergent hardcoded map
+    with pytest.raises(RuntimeError):
+        scan_type_codes(str(tmp_path))
 
 
 def test_scan_golden_against_repo_templates():
@@ -54,13 +57,6 @@ def test_type_for_code_with_mapping():
     assert type_for_code(2, {2: 'boat'}) == 'boat'
     with pytest.raises(ValueError):
         type_for_code(99, {2: 'boat'})
-
-
-def test_type_for_code_legacy_default():
-    assert type_for_code(0) == 'x500'
-    assert type_for_code(4) == 'ugv_kimm'
-    with pytest.raises(ValueError):
-        type_for_code(255)
 
 
 def test_code_for_type_reverse_lookup():

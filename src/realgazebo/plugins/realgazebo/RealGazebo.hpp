@@ -108,8 +108,6 @@ private:
 	/// \brief Callback for ROS2 VehicleStatus subscription
 	void VehicleStatusCallback(const px4_msgs::msg::VehicleStatus::SharedPtr msg);
 
-	uint8_t getTypeCode(const std::string &entity_type) const;
-
 	void setupSendSocket(int &sock, struct sockaddr_in &addr, int port);
 
 	void sendResetMessage();
