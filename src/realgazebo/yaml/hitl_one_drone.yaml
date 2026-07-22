@@ -32,11 +32,12 @@ vehicles:
       # its default ethernet instance on 14550 for QGC, and a DEDICATED
       # MAVLink instance on 14560 carries HIL to/from the bridge. ---
       udp : 10.41.10.2:14560
-      # MUST differ from 14550: the sim container runs with --network host,
-      # so local_port 14550 would make the bridge's own FC socket occupy the
-      # QGC port and swallow its GcsRelay's output - a self-feeding packet
-      # storm (CPU spin, seq-gap floods at the FC, QGC never connects).
-      local_port : 14540
+      # OPTIONAL. Port the bridge binds for this FC link; defaults to
+      # 14600 + the vehicle key, which never collides across a fleet.
+      # Never set it to 14550: the sim container runs with --network host,
+      # so the bridge would occupy the QGC port and swallow its own relay
+      # output - a self-feeding packet storm (see HITL.md).
+      # local_port : 14600
     # OPTIONAL. MAVLink system id the bridge transmits as; must match the
     # FC's MAV_SYS_ID. Defaults to the vehicle key + 1 (PX4 convention).
     # sys_id : 1

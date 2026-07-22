@@ -108,6 +108,17 @@ def test_build_hitl_command_sysid_defaults_to_id_plus_one():
     assert argv[argv.index('--sysid') + 1] == '8'
 
 
+def test_build_hitl_command_local_port_defaults_to_base_plus_id():
+    """14600 + id. PX4 leaves 146xx free, while 145xx is crowded: QGC 14550,
+    SDK 14540, simulator 14560, plus SITL's per-instance 14550+N/14540+N.
+    A 14540 + id scheme would land on QGC's own port at id 10."""
+    spec = VehicleSpec(10, 'x500', None, (0.0,) * 4, mode='hitl',
+                       fc_endpoint={'udp': '10.0.0.2:14560'})
+    argv, _, _ = spawn_core.build_hitl_command(
+        spec, 'c-track', '/opt/px4', '172.17.0.1', 14550)
+    assert argv[argv.index('--local-port') + 1] == '14610'
+
+
 def test_build_hitl_command_sysid_override():
     """An explicit sys_id wins, for an FC whose MAV_SYS_ID is not id+1."""
     spec = VehicleSpec(7, 'x500', None, (0.0,) * 4, mode='hitl', sys_id=42,

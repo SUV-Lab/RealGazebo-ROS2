@@ -91,8 +91,16 @@ YAML:
 ```yaml
 fc :
   udp : 10.41.10.2:14560
-  local_port : 14540      # unique per HITL vehicle (14540 + id)
+  # local_port : 14600    # optional; defaults to 14600 + the vehicle key
 ```
+
+The bridge binds `14600 + key` for its FC socket and `connect()`s it to
+the FC, so the kernel drops datagrams from anyone else — a stray
+broadcast cannot steer the HIL stream, and a foreign autopilot
+heartbeat cannot trip the sysid check. 146xx is free in PX4's port map,
+unlike 145xx (QGC 14550, SDK 14540, simulator 14560, plus SITL's
+per-instance offsets); a `14540 + key` scheme would land on QGC's own
+port at key 10.
 
 QGC connects **directly** to the FC over ethernet (broadcast
 auto-connect), independent of the bridge, so the bridge's FC↔QGC relay

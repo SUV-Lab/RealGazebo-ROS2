@@ -6,6 +6,11 @@ from .airframes import get_autostart_id
 
 MODEL_OUTPUT_DIR = '/tmp/models'
 
+# Base for a HITL bridge's own UDP port ({base} + vehicle_id). 146xx is
+# unused by PX4, unlike 145xx (QGC 14550, SDK 14540, simulator 14560, and
+# SITL's per-instance 14550+N / 14540+N).
+HITL_LOCAL_PORT_BASE = 14600
+
 
 def render_sdf(vehicle_type, unreal_ip, unreal_port,
                models_dir=None, output_dir=MODEL_OUTPUT_DIR):
@@ -116,9 +121,14 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
         if fc.get('baud') is not None:
             argv += ['--baud', str(fc['baud'])]
     elif fc.get('udp'):
-        argv += ['--udp', str(fc['udp'])]
-        if fc.get('local_port') is not None:
-            argv += ['--local-port', str(fc['local_port'])]
+        # Local port the bridge binds for this vehicle's FC socket. Derived
+        # as HITL_LOCAL_PORT_BASE + id so a fleet never collides; fc.local_port
+        # overrides it. 14540 + id (the obvious choice) would hit QGC's 14550
+        # at id 10 and reproduce the self-feeding storm documented in HITL.md.
+        local_port = fc.get('local_port')
+        if local_port is None:
+            local_port = HITL_LOCAL_PORT_BASE + spec.vehicle_id
+        argv += ['--udp', str(fc['udp']), '--local-port', str(local_port)]
     else:
         raise ValueError(
             f"HITL vehicle {spec.vehicle_type}_{spec.vehicle_id} needs an "
