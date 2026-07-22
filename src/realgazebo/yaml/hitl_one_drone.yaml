@@ -1,29 +1,31 @@
 # hitl_one_drone.yaml
 #
-# One real flight controller (HITL) driving an x500 in the shared gz world,
+# One real flight controller (HITL) driving a vehicle in the shared gz world,
 # via gz-hitl-bridge. A HITL vehicle differs from a SITL vehicle only by:
 #   - mode: hitl            -> routes to the bridge backend (no PX4 SITL process)
 #   - fc: {device,baud}     -> the real FC's serial link (or udp+local_port)
-#   - motors: 4             -> x500 is a quad (bridge default is 8)
 #   - build_target omitted  -> the bridge binary comes from default_px4_path
 # Everything else (type, spawnpoint, the numeric id key) behaves exactly like
-# a SITL vehicle, so gz name (x500_1), ROS ns (vehicle2), UE num are unchanged.
+# a SITL vehicle, so gz name (lc_62_0), ROS ns (vehicle1), UE num are unchanged.
 #
-# Prereqs on the FC: flash a firmware with pwm_out_sim (RealGazebo-PX4
-# make px4_fmu-v6x_hitl), select the "HIL Quadcopter X" (1001) airframe,
-# and set CBRK_USB_CHK / manual-control params (see RealGazebo-PX4 HITL notes).
+# Prereqs on the FC (see HITL.md): flash px4_fmu-v6x_hitl, then select the
+# airframe that matches this vehicle -- "RealGazebo HITL lc_62" (1003) for a
+# VTOL, "HIL Quadcopter X" (1001) for a plain quad. The airframe declares the
+# HIL channel layout the bridge assumes. Selecting it RESETS parameters, so
+# configure the MAV_x ethernet instance AFTER, not before.
 
 px4_target:
 # 0 must still be a RealGazebo-PX4 build (used by any SITL vehicles below).
   0 : /home/user/realgazebo/RealGazebo-PX4
 
 vehicles:
-# A HITL x500. To mix with SITL vehicles, just add normal entries alongside.
+# A HITL vehicle. To mix with SITL vehicles, add normal entries alongside.
+# Actuator counts are NOT set here: the model's RealGazebo plugin block
+# declares them (<motorJoint> then <moveableLink>) and the manager scans it.
   0 :
-    type : x500
+    type : lc_62
     mode : hitl
     spawnpoint : (0.0, 0.0, 0.2, 0.0)
-    motors : 4
     fc :
       # --- serial FC link: ---
       # device : /dev/ttyACM0
