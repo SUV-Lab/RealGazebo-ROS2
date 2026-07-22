@@ -95,9 +95,19 @@ fc :
 ```
 
 QGC connects **directly** to the FC over ethernet (broadcast
-auto-connect), independent of the bridge. The GcsRelay still forwards a
-second copy of the telemetry; QGC treats it as an extra link to the same
-vehicle (harmless; a relay on/off switch is planned).
+auto-connect), independent of the bridge, so the bridge's FC↔QGC relay
+is **off** for Ethernet links: `build_hitl_command` only passes `--qgc`
+when it is the only path to QGC (serial), and the bridge opens the relay
+only when that flag is present. Override per vehicle with `qgc_relay:`:
+
+```yaml
+qgc_relay : true     # force the relay on (ethernet FC with no GCS instance)
+qgc_relay : false    # force it off
+```
+
+Without this the relay duplicated every FC message onto loopback — 1219
+pps of redundant traffic next to the FC's own 244 pps direct feed, since
+the HIL instance runs at a much higher rate than the QGC one.
 
 ## Pitfalls (each of these was hit for real)
 

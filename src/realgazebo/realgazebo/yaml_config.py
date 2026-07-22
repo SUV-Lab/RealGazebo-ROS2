@@ -13,6 +13,8 @@ class VehicleSpec:
     fc_endpoint: dict = None    # HITL FC link: {'device','baud'} or {'udp','local_port'}
     motors: int = None          # HITL actuator count (x500=4); None => bridge default
     sys_id: int = None          # HITL: FC MAV_SYS_ID, documentation/validation only
+    qgc_relay: bool = None      # HITL: relay FC<->QGC through the bridge;
+                                # None => auto (serial yes, ethernet no)
     # Entity identity attached by the manager after code-map validation;
     # None straight out of parse_vehicles (the parser stays code-map-free).
     entity: object = None
@@ -48,5 +50,6 @@ def parse_vehicles(config: dict) -> list:
             fc_endpoint=v.get('fc'),
             motors=v.get('motors'),
             sys_id=v.get('sys_id'),
+            qgc_relay=v.get('qgc_relay'),
         ))
     return specs

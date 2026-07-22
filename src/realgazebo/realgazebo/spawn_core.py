@@ -78,6 +78,13 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
     Two RealGazebo-specific values that MUST be passed (bridge defaults are
     wrong here): --world (RealGazebo world is not the bridge default) and
     --motors (x500 is a quad; bridge defaults to 8).
+
+    --qgc (the bridge's FC<->QGC relay) is opt-in. A serial FC has a single
+    pipe carrying HIL and telemetry, so the relay is QGC's ONLY path and is
+    enabled. An ethernet FC keeps its own GCS MAVLink instance, so QGC
+    connects directly and a relayed second copy is pure duplication (measured
+    1219 pps of redundant loopback traffic) - disabled. spec.qgc_relay
+    overrides the choice either way.
     """
     binary = os.path.join(
         px4_path, 'build/px4_sitl_default/bin/gz-hitl-bridge')
@@ -85,8 +92,12 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
         binary,
         '--model', f'{spec.vehicle_type}_{spec.vehicle_id}',
         '--world', world,
-        '--qgc', f'{qgc_host}:{qgc_port}',
     ]
+    relay = spec.qgc_relay
+    if relay is None:
+        relay = not (spec.fc_endpoint or {}).get('udp')
+    if relay:
+        argv += ['--qgc', f'{qgc_host}:{qgc_port}']
     if spec.motors is not None:
         argv += ['--motors', str(spec.motors)]
     fc = spec.fc_endpoint or {}

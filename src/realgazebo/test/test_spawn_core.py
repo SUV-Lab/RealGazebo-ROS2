@@ -107,6 +107,24 @@ def test_build_hitl_command_udp():
     assert argv[argv.index('--udp') + 1] == '192.168.1.36:14560'
     assert argv[argv.index('--local-port') + 1] == '14541'
     assert '--device' not in argv
+    # an ethernet FC reaches QGC on its own GCS instance, so relaying a
+    # second copy through the bridge is pure duplication -> off by default
+    assert '--qgc' not in argv
+
+
+def test_build_hitl_command_qgc_relay_override():
+    """qgc_relay forces the relay on/off regardless of the link type."""
+    base = dict(mode='hitl', motors=4)
+    udp_on = VehicleSpec(1, 'x500', None, (0,) * 4, qgc_relay=True,
+                         fc_endpoint={'udp': '10.0.0.2:14560'}, **base)
+    serial_off = VehicleSpec(0, 'x500', None, (0,) * 4, qgc_relay=False,
+                             fc_endpoint={'device': '/dev/ttyACM0'}, **base)
+    on_argv, _, _ = spawn_core.build_hitl_command(
+        udp_on, 'c-track', '/opt/px4', '172.17.0.1', 14550)
+    off_argv, _, _ = spawn_core.build_hitl_command(
+        serial_off, 'c-track', '/opt/px4', '172.17.0.1', 14550)
+    assert on_argv[on_argv.index('--qgc') + 1] == '172.17.0.1:14550'
+    assert '--qgc' not in off_argv
 
 
 def test_build_hitl_command_requires_endpoint():
