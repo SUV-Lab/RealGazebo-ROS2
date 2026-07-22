@@ -11,7 +11,6 @@ class VehicleSpec:
     # HITL fields (default => a normal SITL vehicle, unchanged behaviour):
     mode: str = 'sitl'          # 'sitl' (PX4 SITL process) or 'hitl' (real FC)
     fc_endpoint: dict = None    # HITL FC link: {'device','baud'} or {'udp','local_port'}
-    motors: int = None          # HITL actuator count (x500=4); None => bridge default
     sys_id: int = None          # HITL: MAVLink system id; None => vehicle_id + 1
     qgc_relay: bool = None      # HITL: relay FC<->QGC through the bridge;
                                 # None => auto (serial yes, ethernet no)
@@ -48,7 +47,6 @@ def parse_vehicles(config: dict) -> list:
             spawnpoint=tuple(float(x) for x in point),
             mode=v.get('mode', 'sitl'),
             fc_endpoint=v.get('fc'),
-            motors=v.get('motors'),
             sys_id=v.get('sys_id'),
             qgc_relay=v.get('qgc_relay'),
         ))

@@ -96,8 +96,7 @@ class ManagerNode(Node):
         return Entity.create(entity_type, entity_id, self._code_map)
 
     def _spawn_one(self, entity, position, rpy, build_target_path, world,
-                   roster=None, mode='sitl', fc_endpoint=None, motors=None,
-                   sys_id=None):
+                   roster=None, mode='sitl', fc_endpoint=None, sys_id=None):
         """Spawn a single vehicle or prop.
 
         Idempotent: an entity already active is skipped, and an id held
@@ -133,7 +132,7 @@ class ManagerNode(Node):
             spec = VehicleSpec(
                 entity.id, entity.type, build_target_path,
                 (position[0], position[1], position[2], rpy[2]),
-                mode=mode, fc_endpoint=fc_endpoint, motors=motors,
+                mode=mode, fc_endpoint=fc_endpoint,
                 sys_id=sys_id, entity=entity)
             # HITL vehicles route to the bridge backend; everything else to
             # the fleet-default backend. record.backend remembers the choice
@@ -220,7 +219,7 @@ class ManagerNode(Node):
                 self._spawn_one(entity, (x, y, z), (0.0, 0.0, yaw),
                                 spec.build_target_path, world, roster=roster,
                                 mode=spec.mode, fc_endpoint=spec.fc_endpoint,
-                                motors=spec.motors, sys_id=spec.sys_id)
+                                sys_id=spec.sys_id)
             except Exception as exc:
                 # One failed vehicle (e.g. its MAVLink host port is taken)
                 # must not kill the whole boot — log and keep going.

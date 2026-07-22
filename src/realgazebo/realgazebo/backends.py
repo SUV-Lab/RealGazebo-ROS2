@@ -181,7 +181,8 @@ class HitlBackend(SubprocessBackend):
             build_create_argv(spec.entity, sdf_path, world, position, rpy),
             check=True)
         argv, env, cwd = build_hitl_command(
-            spec, world, self._px4_path, self._qgc_host, self._qgc_port)
+            spec, world, self._px4_path, self._qgc_host, self._qgc_port,
+            sdf_path)
         # start_new_session so the bridge is a killable group; inherit env so
         # GZ_PARTITION / GZ_IP reach the bridge and it sees the shared world.
         proc = subprocess.Popen(

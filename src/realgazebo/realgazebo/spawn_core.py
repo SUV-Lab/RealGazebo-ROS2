@@ -1,4 +1,5 @@
 import os
+import xml.etree.ElementTree as ET
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
@@ -10,6 +11,36 @@ MODEL_OUTPUT_DIR = '/tmp/models'
 # unused by PX4, unlike 145xx (QGC 14550, SDK 14540, simulator 14560, and
 # SITL's per-instance 14550+N / 14540+N).
 HITL_LOCAL_PORT_BASE = 14600
+
+# HIL_ACTUATOR_CONTROLS carries this many channels
+# (ActuatorOutputs.msg: NUM_ACTUATOR_OUTPUTS = 16).
+HIL_MAX_CHANNELS = 16
+
+
+def scan_hil_actuators(sdf_path):
+    """Count (motors, servos) declared by a rendered model's RealGazebo plugin.
+
+    The model is the single source of truth for its own actuators, the way
+    Gazebo Classic's <control_channels> was - nothing is configured by hand.
+    <motorJoint> entries take the leading HIL channels and <moveableLink>
+    entries (control surfaces) follow, which the paired RealGazebo HITL
+    airframe mirrors with HIL_ACT_FUNC (motors 101.., then servos 201..).
+    """
+    root = ET.parse(sdf_path).getroot()
+    plugin = root.find(".//plugin[@name='custom::RealGazebo']")
+    if plugin is None:
+        raise ValueError(f"{sdf_path}: no custom::RealGazebo plugin block")
+    motors = len(plugin.findall('motorJointList/motorJoint'))
+    servos = len(plugin.findall('moveableLinkList/moveableLink'))
+    if motors == 0:
+        raise ValueError(
+            f"{sdf_path}: the RealGazebo plugin declares no <motorJoint>, "
+            f"so there is nothing for HIL_ACTUATOR_CONTROLS to drive")
+    if motors + servos > HIL_MAX_CHANNELS:
+        raise ValueError(
+            f"{sdf_path}: {motors} motors + {servos} servos exceeds the "
+            f"{HIL_MAX_CHANNELS} HIL_ACTUATOR_CONTROLS channels")
+    return motors, servos
 
 
 def render_sdf(vehicle_type, unreal_ip, unreal_port,
@@ -70,7 +101,7 @@ def build_px4_command(spec, world):
     return argv, env, build_dir
 
 
-def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
+def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port, sdf_path):
     """Return (argv, env, cwd) for the gz-hitl-bridge process of a HITL vehicle.
 
     A HITL vehicle has NO PX4 SITL process; a real flight controller runs the
@@ -80,9 +111,11 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
     process inherits the manager's environment (GZ_PARTITION / GZ_IP) and
     thus sees the shared world's topics.
 
-    Two RealGazebo-specific values that MUST be passed (bridge defaults are
-    wrong here): --world (RealGazebo world is not the bridge default) and
-    --motors (x500 is a quad; bridge defaults to 8).
+    Values that MUST be passed because the bridge's defaults are wrong here:
+    --world (the RealGazebo world is not the bridge default) and the actuator
+    counts. --motors/--servos come from the rendered model via
+    scan_hil_actuators(), so a vehicle's channel layout is declared once, in
+    the SDF, next to the joints it names - never restated in the fleet YAML.
 
     --sysid is the MAVLink system id the bridge stamps on the HIL messages it
     sends. It defaults to vehicle_id + 1, matching PX4's own convention
@@ -113,8 +146,8 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
         relay = not (spec.fc_endpoint or {}).get('udp')
     if relay:
         argv += ['--qgc', f'{qgc_host}:{qgc_port}']
-    if spec.motors is not None:
-        argv += ['--motors', str(spec.motors)]
+    motors, servos = scan_hil_actuators(sdf_path)
+    argv += ['--motors', str(motors), '--servos', str(servos)]
     fc = spec.fc_endpoint or {}
     if fc.get('device'):
         argv += ['--device', str(fc['device'])]
