@@ -69,9 +69,13 @@ param save
 reboot
 # after reboot the sub-params exist:
 param set MAV_1_UDP_PRT 14560
+param set MAV_1_RATE 100000     # default is 1200 B/s (radio-sized) - the
+                                # FC->bridge stream starves without this
 param save
 reboot
-# verify: `mavlink status` now lists a UDP (14560, ...) instance
+# verify: `mavlink status` now lists a UDP (14560, ...) instance with
+# `tx rate max: 100000`; MAV_1_BROADCAST must stay 0 (a broadcasting HIL
+# instance would be discovered and stolen by any QGC on the subnet)
 ```
 
 Host side: put the sim PC on the FC's subnet (PX4's DHCP-fallback
