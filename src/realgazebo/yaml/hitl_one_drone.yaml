@@ -37,4 +37,6 @@ vehicles:
       # QGC port and swallow its GcsRelay's output - a self-feeding packet
       # storm (CPU spin, seq-gap floods at the FC, QGC never connects).
       local_port : 14540
-    sys_id : 1                   # OPTIONAL: must match the FC's MAV_SYS_ID (id + 1)
+    # OPTIONAL. MAVLink system id the bridge transmits as; must match the
+    # FC's MAV_SYS_ID. Defaults to the vehicle key + 1 (PX4 convention).
+    # sys_id : 1

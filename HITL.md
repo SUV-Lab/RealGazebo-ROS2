@@ -109,6 +109,50 @@ Without this the relay duplicated every FC message onto loopback — 1219
 pps of redundant traffic next to the FC's own 244 pps direct feed, since
 the HIL instance runs at a much higher rate than the QGC one.
 
+The rule predates us — Gazebo Classic's `gazebo_mavlink_interface`
+reached the same conclusion (`sitl_gazebo-classic/src/mavlink_interface.cpp`):
+
+|                | Gazebo Classic                      | RealGazebo                       |
+| -------------- | ----------------------------------- | -------------------------------- |
+| decided in     | the plugin (`hil_mode_ && serial_enabled_`) | the manager (passes `--qgc` or not) |
+| serial FC      | relay ON                            | relay ON                         |
+| Ethernet FC    | relay OFF                           | relay OFF                        |
+| SITL           | sockets never opened (`if (hil_mode_)`) | n/a (no bridge)              |
+| override       | none (hardcoded)                    | `qgc_relay:`                     |
+
+## System ids
+
+The bridge stamps a MAVLink system id on everything it sends to the FC
+(HIL_SENSOR, HIL_GPS, its 1 Hz heartbeat), all under component id 200.
+That id defaults to **the vehicle's YAML key + 1** — PX4's own
+convention, since SITL's `rcS` sets `MAV_SYS_ID = instance + 1` and the
+ROS namespace is `/vehicle{key+1}`. So YAML key `0` transmits as system
+`1`, matching a stock FC's default `MAV_SYS_ID`.
+
+Set `sys_id:` on the vehicle only when the FC's `MAV_SYS_ID` is
+something else:
+
+```yaml
+  0 :
+    type : x500
+    mode : hitl
+    sys_id : 42       # this FC's MAV_SYS_ID is 42, not 1
+```
+
+**The bridge refuses to run on a mismatch.** It reads the FC's id from
+the FC's own heartbeat and exits with an error naming both values, so a
+wrong `MAV_SYS_ID` is caught at startup instead of surfacing later as
+odd behaviour: QGC would list the bridge and the FC as two systems, and
+on the `MAV_USEHILGPS` path `mavlink_receiver.cpp` requires
+`msg->sysid == mavlink_system.sysid` and silently drops HIL_GPS
+otherwise. (Only autopilot heartbeats are checked, so a GCS heartbeat
+forwarded by an instance with `MAV_x_FORWARD` on is not mistaken for
+the FC.)
+
+In a multi-HITL fleet each vehicle needs its own sysid, which the
+`key + 1` default already provides; without it every bridge would
+transmit as system 1 and a GCS would merge them into one vehicle.
+
 ## Pitfalls (each of these was hit for real)
 
 - **`local_port` must NEVER be 14550.** The sim container runs with

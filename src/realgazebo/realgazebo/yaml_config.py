@@ -12,7 +12,7 @@ class VehicleSpec:
     mode: str = 'sitl'          # 'sitl' (PX4 SITL process) or 'hitl' (real FC)
     fc_endpoint: dict = None    # HITL FC link: {'device','baud'} or {'udp','local_port'}
     motors: int = None          # HITL actuator count (x500=4); None => bridge default
-    sys_id: int = None          # HITL: FC MAV_SYS_ID, documentation/validation only
+    sys_id: int = None          # HITL: MAVLink system id; None => vehicle_id + 1
     qgc_relay: bool = None      # HITL: relay FC<->QGC through the bridge;
                                 # None => auto (serial yes, ethernet no)
     # Entity identity attached by the manager after code-map validation;

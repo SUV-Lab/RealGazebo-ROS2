@@ -92,9 +92,29 @@ def test_build_hitl_command_serial():
         spec, 'c-track', '/opt/px4', '172.17.0.1', 14550)
     assert argv == [
         '/opt/px4/build/px4_sitl_default/bin/gz-hitl-bridge',
-        '--model', 'x500_0', '--world', 'c-track', '--qgc', '172.17.0.1:14550',
+        '--model', 'x500_0', '--world', 'c-track', '--sysid', '1',
+        '--qgc', '172.17.0.1:14550',
         '--motors', '4', '--device', '/dev/ttyACM0', '--baud', '921600']
     assert env is None and cwd is None
+
+
+def test_build_hitl_command_sysid_defaults_to_id_plus_one():
+    """PX4's own convention: SITL's rcS does MAV_SYS_ID = instance + 1, and
+    the ROS namespace is /vehicle{id+1}, so HITL uses the same offset."""
+    spec = VehicleSpec(7, 'x500', None, (0.0,) * 4, mode='hitl',
+                       fc_endpoint={'udp': '10.0.0.2:14560'})
+    argv, _, _ = spawn_core.build_hitl_command(
+        spec, 'c-track', '/opt/px4', '172.17.0.1', 14550)
+    assert argv[argv.index('--sysid') + 1] == '8'
+
+
+def test_build_hitl_command_sysid_override():
+    """An explicit sys_id wins, for an FC whose MAV_SYS_ID is not id+1."""
+    spec = VehicleSpec(7, 'x500', None, (0.0,) * 4, mode='hitl', sys_id=42,
+                       fc_endpoint={'udp': '10.0.0.2:14560'})
+    argv, _, _ = spawn_core.build_hitl_command(
+        spec, 'c-track', '/opt/px4', '172.17.0.1', 14550)
+    assert argv[argv.index('--sysid') + 1] == '42'
 
 
 def test_build_hitl_command_udp():

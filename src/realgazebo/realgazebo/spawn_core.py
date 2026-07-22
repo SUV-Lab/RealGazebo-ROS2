@@ -79,6 +79,14 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
     wrong here): --world (RealGazebo world is not the bridge default) and
     --motors (x500 is a quad; bridge defaults to 8).
 
+    --sysid is the MAVLink system id the bridge stamps on the HIL messages it
+    sends. It defaults to vehicle_id + 1, matching PX4's own convention
+    (SITL's rcS sets MAV_SYS_ID = instance + 1, and the ROS namespace is
+    /vehicle{id+1}), so a HITL vehicle shares the numbering of its SITL
+    siblings. spec.sys_id overrides it for an FC whose MAV_SYS_ID differs.
+    Without a distinct sysid per vehicle, every bridge in a multi-HITL fleet
+    would transmit as system 1 and QGC would merge them into one vehicle.
+
     --qgc (the bridge's FC<->QGC relay) is opt-in. A serial FC has a single
     pipe carrying HIL and telemetry, so the relay is QGC's ONLY path and is
     enabled. An ethernet FC keeps its own GCS MAVLink instance, so QGC
@@ -88,10 +96,12 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port):
     """
     binary = os.path.join(
         px4_path, 'build/px4_sitl_default/bin/gz-hitl-bridge')
+    sysid = spec.sys_id if spec.sys_id is not None else spec.vehicle_id + 1
     argv = [
         binary,
         '--model', f'{spec.vehicle_type}_{spec.vehicle_id}',
         '--world', world,
+        '--sysid', str(sysid),
     ]
     relay = spec.qgc_relay
     if relay is None:
