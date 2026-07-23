@@ -164,7 +164,9 @@ fi
 TTY_FLAG=""
 if [ -t 0 ]; then TTY_FLAG="-it"; fi
 
-docker exec -u user $TTY_FLAG "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo manager_sim.launch.py $LAUNCH_ARGS"
+# GZ_IP passthrough: a fleet with PILS vehicles needs the gz server to
+# advertise this host's LAN address (GZ_IP=<lan ip> ./run_realgazebo.sh ...)
+docker exec -u user ${GZ_IP:+-e GZ_IP=$GZ_IP} $TTY_FLAG "$container_name" bash -c "source /opt/ros/jazzy/setup.bash && source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && ros2 launch realgazebo manager_sim.launch.py $LAUNCH_ARGS"
 
 docker stop "$container_name" 2>/dev/null
 docker rm "$container_name" 2>/dev/null

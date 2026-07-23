@@ -319,8 +319,11 @@ def launch_setup(context, *args, **kwargs):
         f.write(output_world)
         print(f'c-track.sdf is generated')
 
-    # it sometimes need to set GZ_IP to 127.0.0.1 or not so just use it
-    gz_ip_env = SetEnvironmentVariable('GZ_IP', '127.0.0.1')
+    # gz-transport advertise address. 127.0.0.1 keeps the world host-local
+    # (default); a fleet with PILS vehicles must advertise a LAN address so
+    # remote SITLs can reach it — start with GZ_IP=<this host's LAN ip>.
+    gz_ip_env = SetEnvironmentVariable(
+        'GZ_IP', os.environ.get('GZ_IP', '127.0.0.1'))
 
     gz_sim_pkg = get_package_share_directory('ros_gz_sim')
 

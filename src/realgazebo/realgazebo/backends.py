@@ -198,6 +198,44 @@ class HitlBackend(SubprocessBackend):
         return types.SimpleNamespace(pid=proc.pid, px4=proc, extras=extras)
 
 
+class PilsBackend(SubprocessBackend):
+    """PILS backend: the vehicle's PX4 SITL runs on another host.
+
+    Same division of labour as HITL — the manager owns only the gz side:
+    launch() creates the gz entity and the per-vehicle extras (camera
+    receivers, lidar bridge). The autopilot is a PX4 SITL container on a
+    remote PC (scripts/run_pils_vehicle.sh) that attaches to the shared
+    world over gz-transport (PX4_GZ_MODEL_NAME + GZ_PARTITION, both hosts
+    advertising a routable GZ_IP). There is no local autopilot process, so
+    alive() is unconditionally True: the remote peer may come and go
+    (container restart, PC reboot) without the crash watcher reaping the
+    model — exactly like a power-cycled HITL FC.
+    """
+
+    def __init__(self, px4_path):
+        # only used by the inherited _launch_extras as a model search dir
+        self._px4_path = px4_path
+
+    def launch(self, spec, world, position, rpy, unreal_ip, unreal_port,
+               roster=None):
+        """Create the gz entity and its extras; return a handle.
+
+        roster is accepted for interface parity and ignored (the remote
+        SITL is not a local network_sim participant).
+        """
+        sdf_path = render_sdf(spec.vehicle_type, unreal_ip, unreal_port)
+        subprocess.run(
+            build_create_argv(spec.entity, sdf_path, world, position, rpy),
+            check=True)
+        extras = self._launch_extras(spec, world, sdf_path, unreal_ip)
+        # px4 slot deliberately None: the inherited kill() skips it and
+        # reaps only the extras.
+        return types.SimpleNamespace(pid=None, px4=None, extras=extras)
+
+    def alive(self, handle):
+        return True
+
+
 class DockerBackend:
     """Multi-container backend: one vehicle = one sibling docker container.
 

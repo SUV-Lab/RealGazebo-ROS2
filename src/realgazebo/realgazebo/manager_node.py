@@ -13,7 +13,7 @@ from rosgraph_msgs.msg import Clock
 from .yaml_config import parse_vehicles, VehicleSpec
 from .spawn_core import (
     render_sdf, build_create_argv, build_remove_argv, build_set_pose_argv)
-from .backends import make_backend, HitlBackend
+from .backends import make_backend, HitlBackend, PilsBackend
 from .entity import Entity
 from .registry import EntityRegistry
 from .protocol import parse_packet, DespawnCommand
@@ -63,6 +63,12 @@ class ManagerNode(Node):
         self._hitl_backend = HitlBackend(
             px4_path=self.get_parameter('default_px4_path').value,
             qgc_host=self.get_parameter('mavlink_gcs_ip').value,
+        )
+        # PILS vehicles (mode: pils): PX4 SITL runs on a remote PC and
+        # attaches over gz-transport (see scripts/run_pils_vehicle.sh); the
+        # manager owns only the gz entity and its extras, in both fleet modes.
+        self._pils_backend = PilsBackend(
+            px4_path=self.get_parameter('default_px4_path').value,
         )
         self._spawn_lock = threading.Lock()
         self._clock_seen = False
@@ -134,10 +140,12 @@ class ManagerNode(Node):
                 (position[0], position[1], position[2], rpy[2]),
                 mode=mode, fc_endpoint=fc_endpoint,
                 sys_id=sys_id, entity=entity)
-            # HITL vehicles route to the bridge backend; everything else to
-            # the fleet-default backend. record.backend remembers the choice
-            # so the crash watcher and despawn reap through the same one.
-            backend = self._hitl_backend if mode == 'hitl' else self.backend
+            # HITL vehicles route to the bridge backend, PILS vehicles to the
+            # entity-only backend; everything else to the fleet-default one.
+            # record.backend remembers the choice so the crash watcher and
+            # despawn reap through the same one.
+            backend = {'hitl': self._hitl_backend,
+                       'pils': self._pils_backend}.get(mode, self.backend)
             handle = backend.launch(
                 spec, world, position, rpy,
                 self.get_parameter('unreal_ip').value,

@@ -28,9 +28,11 @@ def parse_vehicles(config: dict) -> list:
     error instead of being silently skipped.
 
     HITL vehicles add `mode: hitl` plus an `fc:` block (device+baud or
-    udp+local_port). Everything else (type, spawnpoint, the numeric id key)
-    is identical to a SITL vehicle, so the id-derived identity (gz name,
-    ROS namespace, UE num) is unchanged.
+    udp+local_port). PILS vehicles add `mode: pils` and nothing else: their
+    PX4 SITL runs on a remote PC (scripts/run_pils_vehicle.sh) and attaches
+    over gz-transport. Everything else (type, spawnpoint, the numeric id
+    key) is identical to a SITL vehicle, so the id-derived identity (gz
+    name, ROS namespace, UE num) is unchanged.
     """
     px4_targets = config.get('px4_target', {})
     vehicles = config.get('vehicles', {})

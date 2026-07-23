@@ -41,12 +41,22 @@ def generate_launch_description():
             description='GCS (QGC) address injected into vehicle containers'),
     ]
 
-    # Pin GZ transport to localhost for the monolithic run (matches legacy).
+    # One shared gz-transport partition for every participant (gz server,
+    # manager, extras, PX4/bridge subprocesses, docker vehicles, remote PILS
+    # SITLs). Without this the default partition is hostname:user, which can
+    # never match across hosts/containers.
+    gz_partition = SetEnvironmentVariable(
+        'GZ_PARTITION', os.environ.get('GZ_PARTITION', 'realgazebo'))
+
+    # Pin GZ transport to localhost for the monolithic run (matches legacy)
+    # unless the operator already exported GZ_IP: a fleet with PILS vehicles
+    # must advertise the host's LAN address so remote SITLs can discover the
+    # world (GZ_IP=<lan ip> scripts/run_realgazebo.sh ...).
     # In docker mode this must NOT fire: the gz server has to announce its
     # gazebo-network address (container env GZ_IP, e.g. 172.20.0.2) or
     # sibling vehicle containers can never discover it.
     gz_ip = SetEnvironmentVariable(
-        'GZ_IP', '127.0.0.1',
+        'GZ_IP', os.environ.get('GZ_IP', '127.0.0.1'),
         condition=IfCondition(PythonExpression(
             ["'", LaunchConfiguration('backend'), "' == 'subprocess'"])))
 
@@ -87,4 +97,5 @@ def generate_launch_description():
             'default_px4_path': LaunchConfiguration('px4_path'),
         }])
 
-    return LaunchDescription(args + [gz_ip, gazebo, xrce_agent, manager])
+    return LaunchDescription(
+        args + [gz_partition, gz_ip, gazebo, xrce_agent, manager])
