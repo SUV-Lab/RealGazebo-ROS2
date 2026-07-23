@@ -157,7 +157,7 @@ def build_hitl_command(spec, world, px4_path, qgc_host, qgc_port, sdf_path):
         # Local port the bridge binds for this vehicle's FC socket. Derived
         # as HITL_LOCAL_PORT_BASE + id so a fleet never collides; fc.local_port
         # overrides it. 14540 + id (the obvious choice) would hit QGC's 14550
-        # at id 10 and reproduce the self-feeding storm documented in HITL.md.
+        # at id 10 and reproduce the self-feeding storm documented in docs/HITL.md.
         local_port = fc.get('local_port')
         if local_port is None:
             local_port = HITL_LOCAL_PORT_BASE + spec.vehicle_id

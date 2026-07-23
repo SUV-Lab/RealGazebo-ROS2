@@ -1,0 +1,73 @@
+# hitl.yaml
+#
+# HITL example fleet: three real flight controllers driving three gz
+# models, showing every FC link style side by side. A HITL vehicle
+# differs from a SITL vehicle only by:
+#   - mode: hitl            -> the bridge backend (no PX4 SITL process)
+#   - fc: {...}             -> how to reach the real FC (serial or udp)
+#   - build_target omitted  -> the bridge binary comes from default_px4_path
+# Everything else (type, spawnpoint, the numeric id key) behaves exactly
+# like a SITL vehicle: gz name lc_62_0, ROS ns /vehicle1, UE num.
+#
+# Derived per vehicle from the id key (see docs/HITL.md):
+#   sysid = key + 1     (must equal the FC's MAV_SYS_ID)
+#   local_port = 14600 + key
+# Actuator counts are NOT set here: the model's RealGazebo plugin block
+# declares them and the manager scans it.
+#
+# FC prep (once per board, see docs/HITL.md): flash px4_fmu-v6x_hitl,
+# select the matching airframe -- "HIL lc_62" (1003), "HIL
+# rover_ackermann" (1004), or stock "HIL Quadcopter X" (1001) for a
+# plain quad -- THEN set the MAV_1/uXRCE params (airframe selection
+# resets parameters).
+
+px4_target:
+# 0 must still be a RealGazebo-PX4 build (bridge binary; also used by
+# any SITL vehicles you mix into the fleet).
+  0 : /home/user/realgazebo/RealGazebo-PX4
+
+vehicles:
+
+# -- vehicle 1: Ethernet FC, everything derived -----------------------
+# sysid 1, bridge local_port 14600. The FC keeps its default ethernet
+# instance on 14550 for QGC and carries HIL on a dedicated instance at
+# 14560 (canonical split).
+  0 :
+    type : lc_62
+    mode : hitl
+    spawnpoint : (0.0, 0.0, 0.2, 0.0)
+    fc :
+      udp : 10.41.10.11:14560
+
+# -- vehicle 2: Ethernet FC, showing the optional overrides -----------
+# The commented values below all equal the derived defaults for this
+# key -- set one only when the FC differs from it.
+  1 :
+    type : lc_62
+    mode : hitl
+    spawnpoint : (0.0, 6.0, 0.2, 0.0)
+    fc :
+      udp : 10.41.10.21:14560
+      # Port the bridge binds for this FC link; defaults to 14600 + key
+      # (14601 here). NEVER 14550: the sim runs with --network host, so
+      # the bridge would occupy the QGC port (self-feeding storm, see
+      # docs/HITL.md).
+      # local_port : 14601
+    # MAVLink system id the bridge transmits as; must match the FC's
+    # MAV_SYS_ID. Defaults to key + 1 (2 here) -- set it only when the
+    # FC uses a different id.
+    # sys_id : 2
+    # FC<->QGC relay through the bridge: auto (serial on, ethernet off).
+    # Force only when the FC has no QGC-facing MAVLink instance.
+    # qgc_relay : false
+
+# -- vehicle 3: serial FC (USB), zero FC-side config ------------------
+# The single serial pipe carries HIL and telemetry, so the bridge relays
+# QGC traffic itself -- QGC must NOT open the serial port.
+  2 :
+    type : rover_ackermann
+    mode : hitl
+    spawnpoint : (0.0, 12.0, 0.2, 0.0)
+    fc :
+      device : /dev/ttyACM0
+      baud : 921600      # nominal; USB CDC ignores the baud value
