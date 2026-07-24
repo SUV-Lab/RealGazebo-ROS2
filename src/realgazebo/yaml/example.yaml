@@ -1,25 +1,42 @@
 # example.yaml
+#
+# The 10-vehicle fleet of sitl.yaml with the execution mode split across
+# all three backends — same types, same spawnpoints, only `mode` (and
+# what each mode needs) differs:
+#
+#   sitl (4)  keys 2,3,6,7 — PX4 subprocess on the sim host (build_target)
+#   hitl (3)  keys 0,1,5   — a real FC per vehicle (fc: udp), one of each
+#                            bench airframe: x500=1001, lc_62=1003,
+#                            rover_ackermann=1004 (see docs/HITL.md)
+#   pils (3)  keys 4,8,9   — PX4 on a remote PC (see docs/PILS.md);
+#                            started there with run_pils_vehicle.sh
+#
+# Everything id-derived is unchanged in every mode: sysid = key+1, ROS
+# namespace /vehicle{key+1}, gz name {type}_{key}, UE num.
+# HITL fc addresses follow the fleet convention FC = 10.41.10.{N}1
+# (N = key+1); each FC's MAV_SYS_ID must equal key+1.
+#
+# Start (GZ_IP is required whenever remote hosts participate):
+#   GZ_IP=10.41.10.1 scripts/run_realgazebo.sh example.yaml
 
 px4_target:
-# - A mapping of build targets identified by unique numeric keys.
-# - 0 must be a RealGazebo-PX4 build target.
   0 : /home/user/realgazebo/RealGazebo-PX4
-  # 1: /path/to/your/other/PX4-Autopilot
 
 vehicles:
-# - Each entity is identified by a unique numeric key (e.g., 0, 1, 2, 3).
-#  - 'type': Specifies the type of the entity.
-#  - 'build_target': References the PX4 target defined above, determining which PX4-Autopilot build to use.
-#  - 'spawnpoint' : Defines the spawn location in a 3D space using coordinates and a yaw value (in radians) (x, y, z, yaw).
+
   0 :
     type : x500
-    build_target : 0
+    mode : hitl
     spawnpoint : (18.846, 14.751, -1.3, -3.14)
+    fc :
+      udp : 10.41.10.11:14560
 
   1 :
     type : lc_62
-    build_target : 0
+    mode : hitl
     spawnpoint : (18.846, -19.053, -0.8, -3.14)
+    fc :
+      udp : 10.41.10.21:14560
 
   2 :
     type : x500_lidar_2d
@@ -33,13 +50,15 @@ vehicles:
 
   4 :
     type : x500_lidar_2d
-    build_target : 0
+    mode : pils
     spawnpoint : (-24.458, 16.23, 0.5, -3.14)
 
   5 :
     type : rover_ackermann
-    build_target : 0
+    mode : hitl
     spawnpoint : (25.8707, 14.751, -1, -3.14)
+    fc :
+      udp : 10.41.10.61:14560
 
   6 :
     type : rover_ackermann
@@ -50,14 +69,13 @@ vehicles:
     type : rover_ackermann
     build_target : 0
     spawnpoint : (25.8707, -10.5, -0.5, -3.14)
-    
+
   8 :
     type : boat
-    build_target : 0
+    mode : pils
     spawnpoint : (-281.27, -235.26, 8.5, -1.57)
 
   9 :
     type : boat
-    build_target : 0
+    mode : pils
     spawnpoint : (-265.74, -235.26, 8.5, -1.57)
-    

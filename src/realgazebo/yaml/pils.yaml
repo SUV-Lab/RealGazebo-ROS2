@@ -1,0 +1,37 @@
+# pils.yaml
+#
+# PILS example: two vehicles whose PX4 runs on a REMOTE PC (the bench
+# setup verified 2026-07-24 — both on ONE PILS PC, sharing one uXRCE
+# agent). A PILS vehicle needs nothing but `mode: pils`: no fc block, no
+# build_target — the manager spawns the gz model and its extras, and the
+# autopilot attaches over gz-transport from the remote side.
+#
+# Sim PC (the LAN address is NOT optional — it also arms the DDS
+# interface whitelist every remote agent depends on, see docs/PILS.md):
+#   GZ_IP=10.41.10.1 scripts/run_realgazebo.sh pils.yaml
+#
+# PILS PC, one line per vehicle (first one starts the shared agent,
+# later ones reuse it):
+#   ./run_pils_vehicle.sh x500 0 10.41.10.1 <qgc_ip>
+#   ./run_pils_vehicle.sh boat 1 10.41.10.1 <qgc_ip>
+#
+# Identity stays id-derived exactly like SITL/HITL: gz name x500_0,
+# ROS namespace /vehicle{key+1} (from the remote agent), UE num, and the
+# MAVLink sysid the remote PX4 beacons with is key+1.
+
+px4_target:
+# 0 must still be a RealGazebo-PX4 build (used by any SITL vehicles you
+# mix into the fleet; PILS vehicles themselves never touch it).
+  0 : /home/user/realgazebo/RealGazebo-PX4
+
+vehicles:
+
+  0 :
+    type : x500
+    mode : pils
+    spawnpoint : (18.846, 14.751, -1.3, -3.14)
+
+  1 :
+    type : boat
+    mode : pils
+    spawnpoint : (-281.27, -235.26, 8.5, -1.57)
