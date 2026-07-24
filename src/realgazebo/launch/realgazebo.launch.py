@@ -28,13 +28,15 @@ from launch.actions import (
 from launch.event_handlers import OnProcessStart, OnProcessExit
 from launch.actions import RegisterEventHandler
 
-support_vehicle = ["x500", "x500_lidar_2d", "rover_ackermann", "lc_62", "boat"]
+support_vehicle = ["x500", "x500_lidar_2d", "x500_lidar_3d", "rover_ackermann",
+                   "lc_62", "boat"]
 support_obstacle = ["rock"]
 without_px4 = []
 
 VEHICLE_CAMERAS = {
     'x500': ['front', 'bottom'],
     'x500_lidar_2d': ['front', 'bottom'],
+    'x500_lidar_3d': ['front', 'bottom'],
     'lc_62': ['front', 'bottom'],
     'rover_ackermann': ['front', 'top'],
     'boat': ['front', 'top'],

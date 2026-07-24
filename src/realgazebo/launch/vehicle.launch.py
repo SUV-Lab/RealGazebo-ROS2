@@ -46,6 +46,7 @@ SENSOR_BRIDGE_TYPES = {
 VEHICLE_CAMERAS = {
     'x500': ['front', 'bottom'],
     'x500_lidar_2d': ['front', 'bottom'],
+    'x500_lidar_3d': ['front', 'bottom'],
     'lc_62': ['front', 'bottom'],
     'rover_ackermann': ['front', 'top'],
     'boat': ['front', 'top'],

@@ -49,6 +49,7 @@ def test_scan_golden_against_repo_templates():
         2: 'boat',
         3: 'lc_62',
         5: 'x500_lidar_2d',   # own code so it is UDP-spawnable (UE renders as x500)
+        6: 'x500_lidar_3d',   # aware4 line
         201: 'rock',
     }
 
