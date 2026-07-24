@@ -128,6 +128,26 @@ set(VILS_STL "${MESH_DIR}/vils.stl")
 set(URBAN_STL "${MESH_DIR}/urban.stl")
 set(BASE_URL "https://realgazebo.cbnu.ac.kr/download/${MODEL_VERSION}")
 
+# Fall back to 'latest' when this version has no mesh directory on the
+# server yet (e.g. a fresh tag before its release upload). Meshes change
+# rarely, so the newest published set is the right default - and a WARN
+# beats every checkout failing FATAL on a missing path. Probed once via a
+# known checksum file.
+execute_process(
+  COMMAND curl -fsI --retry 3 --retry-delay 2 --connect-timeout 10
+          "${BASE_URL}/c-track.stl.md5"
+  RESULT_VARIABLE version_probe
+  OUTPUT_QUIET
+  ERROR_QUIET
+)
+if(NOT version_probe EQUAL 0)
+  message(WARNING
+    "No mesh directory for '${MODEL_VERSION}' on the server; "
+    "falling back to 'latest'")
+  set(MODEL_VERSION "latest")
+  set(BASE_URL "https://realgazebo.cbnu.ac.kr/download/latest")
+endif()
+
 # Function to download file with MD5 verification (using curl with retry)
 function(download_with_verification filename)
   set(FILE_PATH "${MESH_DIR}/${filename}")
