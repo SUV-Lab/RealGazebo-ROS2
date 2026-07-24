@@ -126,8 +126,25 @@ vehicles in QGC or silently dropped HIL_GPS.
 ## Multi-vehicle HITL (fleet)
 
 Several real FCs driving several gz models at once. One flat subnet
-carries everything — there is no separate FC↔companion link. Address by
-vehicle number N (N = YAML key + 1):
+carries everything — there is no separate FC↔companion link.
+
+**Start the sim with `GZ_IP=<sim host's fleet address>`** whenever ANY
+remote host participates (real-FC companions, PILS PCs):
+
+```sh
+GZ_IP=10.41.10.1 scripts/run_realgazebo.sh fleet.yaml
+```
+
+This one switch enables everything fleet mode needs: the shared
+gz-transport partition/advertise address, and a FastDDS interface
+whitelist for every sim-side node. The whitelist is not optional at
+fleet scale: a multi-homed sim host (docker bridges, second NIC, VPN)
+advertises all its locators, and the companions' uXRCE agents wedge on
+discovery against the unreachable ones once enough sim-side
+participants exist (~10+ camera receivers) — sessions then collapse on
+a ~40 s cycle. Bench-verified either way.
+
+Address by vehicle number N (N = YAML key + 1):
 
 | role                             | IP           |
 |----------------------------------|--------------|

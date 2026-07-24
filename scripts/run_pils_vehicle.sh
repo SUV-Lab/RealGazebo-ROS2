@@ -11,8 +11,8 @@
 # The container uses host networking, advertises this host's own address
 # on the route toward the sim PC, and runs ONLY PX4 (the model already
 # exists in the shared world — PX4_GZ_MODEL_NAME attaches, never spawns).
-# The uXRCE client targets a local agent (companion pattern: run
-# MicroXRCEAgent on this PC), and MAVLink beacons to qgc_ip.
+# The uXRCE client targets a local agent (companion pattern: the container
+# runs its own MicroXRCEAgent), and MAVLink beacons to qgc_ip.
 #
 # Usage: run_pils_vehicle.sh <vehicle_type> <id> <sim_pc_ip> [qgc_ip] [world]
 set -e
@@ -26,6 +26,41 @@ IMAGE=${PILS_IMAGE:-mdeagewt/realgazebo:ue5.7}
 # advertise the address this host uses to reach the sim PC
 MY_IP=$(ip -4 route get "$SIM_IP" | grep -oP 'src \K\S+')
 
+# One shared agent per PC (host networking): the first vehicle starts it,
+# later ones reuse it. Multiple SITL clients on one agent are fine - the
+# rcS derives a distinct uXRCE client key per instance, exactly like the
+# monolithic fleet's single shared agent.
+START_AGENT=1
+if ss -uln 2>/dev/null | grep -q ":8888 "; then
+  START_AGENT=0
+  echo "port 8888 already served - reusing the existing agent"
+fi
+
+# Pin every DDS participant in the container (the agent's included) to this
+# host's fleet address: multi-homed hosts otherwise advertise their
+# docker-bridge/VPN locators too, and remote participants wedge on discovery
+# against those unreachable addresses (same fix as manager_sim.launch.py
+# applies on the sim side). Generated host-side, bind-mounted read-only.
+WL_XML="/tmp/pils_dds_whitelist_${TYPE}_${ID}.xml"
+cat > "$WL_XML" <<XML
+<?xml version="1.0" encoding="UTF-8" ?>
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>udp_whitelist</transport_id>
+      <type>UDPv4</type>
+      <interfaceWhiteList><address>${MY_IP}</address></interfaceWhiteList>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="pils_wl" is_default_profile="true">
+    <rtps>
+      <userTransports><transport_id>udp_whitelist</transport_id></userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
+XML
+
 exec docker run --rm -d --network host --name "pils_${TYPE}_${ID}" \
   -e GZ_PARTITION=realgazebo \
   -e GZ_IP="$MY_IP" \
@@ -37,12 +72,17 @@ exec docker run --rm -d --network host --name "pils_${TYPE}_${ID}" \
   -e MAVLINK_GCS_IP="$QGC_IP" \
   -e VEHICLE_TYPE="$TYPE" \
   -e VEHICLE_ID="$ID" \
+  -e START_AGENT="$START_AGENT" \
+  -e FASTRTPS_DEFAULT_PROFILES_FILE=/tmp/dds_whitelist.xml \
+  -v "$WL_XML":/tmp/dds_whitelist.xml:ro \
   "$IMAGE" bash -c '
     # own uXRCE agent, docker-mode style (the SITL uxrce client targets
-    # localhost:8888 by default). MUST start BEFORE sourcing ROS: jazzy'"'"'s
-    # LD_LIBRARY_PATH shadows the standalone agent'"'"'s bundled FastDDS and
-    # every entity creation then fails with error 255.
-    /usr/local/bin/MicroXRCEAgent udp4 -p 8888 -v2 &
+    # localhost:8888 by default). MUST start BEFORE sourcing ROS: jazzy
+    # puts a different FastDDS on LD_LIBRARY_PATH, shadowing the agent'"'"'s
+    # own, and every entity creation then fails with error 255.
+    if [ "$START_AGENT" = 1 ]; then
+      /usr/local/bin/MicroXRCEAgent udp4 -p 8888 -v2 &
+    fi
     source /opt/ros/jazzy/setup.bash
     PX4=/home/user/realgazebo/RealGazebo-PX4
     # airframe id from the {id}_gz_{type} filename convention (same rule as

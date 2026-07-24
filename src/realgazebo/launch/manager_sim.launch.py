@@ -45,6 +45,38 @@ def generate_launch_description():
     # manager, extras, PX4/bridge subprocesses, docker vehicles, remote PILS
     # SITLs). Without this the default partition is hostname:user, which can
     # never match across hosts/containers.
+    # When the fleet spans hosts (operator exported GZ_IP), pin every DDS
+    # participant in this container to that one address. Multi-homed hosts
+    # (docker bridges, secondary NICs, VPNs) otherwise advertise ALL their
+    # locators, and remote uXRCE agents wedge on discovery against the
+    # unreachable ones: measured on the bench, >~10 local participants
+    # (camera receivers) killed every FC/PILS agent session within ~30 s on
+    # a ~40 s relapse cycle, while this whitelist kept the same fleet
+    # streaming indefinitely. Local-only runs (no GZ_IP) are untouched.
+    launch_actions_dds = []
+    if os.environ.get('GZ_IP'):
+        _wl_path = '/tmp/realgazebo_dds_whitelist.xml'
+        with open(_wl_path, 'w') as _f:
+            _f.write(f'''<?xml version="1.0" encoding="UTF-8" ?>
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>udp_whitelist</transport_id>
+      <type>UDPv4</type>
+      <interfaceWhiteList><address>{os.environ['GZ_IP']}</address></interfaceWhiteList>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="realgazebo_wl" is_default_profile="true">
+    <rtps>
+      <userTransports><transport_id>udp_whitelist</transport_id></userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
+''')
+        launch_actions_dds.append(SetEnvironmentVariable(
+            'FASTRTPS_DEFAULT_PROFILES_FILE', _wl_path))
+
     gz_partition = SetEnvironmentVariable(
         'GZ_PARTITION', os.environ.get('GZ_PARTITION', 'realgazebo'))
 
@@ -98,4 +130,5 @@ def generate_launch_description():
         }])
 
     return LaunchDescription(
-        args + [gz_partition, gz_ip, gazebo, xrce_agent, manager])
+        args + launch_actions_dds
+        + [gz_partition, gz_ip, gazebo, xrce_agent, manager])
