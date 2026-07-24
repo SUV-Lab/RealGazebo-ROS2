@@ -99,21 +99,43 @@ class ImageSubscriber(Node):
         except Exception as e:
             self.get_logger().error(f"Failed to display image: {e}")
 
-    def send_request(self, transition_id):
+    def send_request(self, transition_id, timeout_sec=None):
         self.req.transition.id = transition_id
         self.future = self.cli.call_async(self.req)
-        rclpy.spin_until_future_complete(self, self.future)
+        rclpy.spin_until_future_complete(self, self.future, timeout_sec=timeout_sec)
         return self.future.result()
+
+    def restore_lifecycle(self):
+        """Stream lifetime == viewer lifetime: on exit (Ctrl-C / window
+        close) the receiver is always driven back to UNCONFIGURED,
+        regardless of who activated it. Bounded waits: shutdown must never
+        hang on a dead receiver."""
+        for transition in (Transition.TRANSITION_DEACTIVATE,
+                           Transition.TRANSITION_CLEANUP):
+            try:
+                self.send_request(transition, timeout_sec=3.0)
+            except Exception as e:
+                self.get_logger().warning(f'lifecycle teardown failed: {e}')
+        self.get_logger().info('receiver stream stopped')
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    # Keep SIGINT as a plain python KeyboardInterrupt: rclpy's own handler
+    # would tear the context down BEFORE our finally runs, making the
+    # lifecycle-restore service calls impossible.
+    rclpy.init(args=args,
+               signal_handler_options=rclpy.signals.SignalHandlerOptions.NO)
     image_subscriber = ImageSubscriber()
     try:
-        rclpy.spin(image_subscriber)
+        # spin_once with a timeout instead of a bare spin(): with rclpy's
+        # signal handlers disabled, a C-blocked spin defers KeyboardInterrupt
+        # until a message arrives - which may be never while no stream flows.
+        while rclpy.ok():
+            rclpy.spin_once(image_subscriber, timeout_sec=0.2)
     except KeyboardInterrupt:
         pass
     finally:
+        image_subscriber.restore_lifecycle()
         image_subscriber.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
