@@ -6,7 +6,7 @@
 #   - the sim PC runs the fleet with this vehicle declared `mode: pils`
 #     (the manager spawns the gz model and nothing else), and advertises
 #     its LAN address:  GZ_IP=<sim pc ip> scripts/run_realgazebo.sh ...
-#   - this PC has the fleet image (PILS_IMAGE, default aware4docker/realgazebo:1.3-rc1)
+#   - this PC has the fleet image (PILS_IMAGE, default aware4docker/realgazebo:aware4)
 #
 # The container uses host networking, advertises this host's own address
 # on the route toward the sim PC, and runs ONLY PX4 (the model already
@@ -21,7 +21,7 @@ ID=${2:?vehicle id (the fleet YAML key)}
 SIM_IP=${3:?sim pc ip}
 QGC_IP=${4:-$SIM_IP}
 WORLD=${5:-c-track}
-IMAGE=${PILS_IMAGE:-aware4docker/realgazebo:1.3-rc1}
+IMAGE=${PILS_IMAGE:-aware4docker/realgazebo:aware4}
 
 # advertise the address this host uses to reach the sim PC
 MY_IP=$(ip -4 route get "$SIM_IP" | grep -oP 'src \K\S+')

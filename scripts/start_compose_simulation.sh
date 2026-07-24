@@ -25,7 +25,7 @@
 #                    localhost/127.0.0.1 is rewritten automatically)
 #   --unreal-port P  Unreal Engine UDP port (default: 5005)
 #   --world W        World: c-track | urban | vils (default: c-track)
-#   --image IMG      Manager/vehicle image (default: aware4docker/realgazebo:1.3-rc1)
+#   --image IMG      Manager/vehicle image (default: aware4docker/realgazebo:aware4)
 set -euo pipefail
 ORIG_PWD="$(pwd)"
 cd "$(dirname "$0")/.."
@@ -34,7 +34,7 @@ UNREAL_IP="host.docker.internal"
 UNREAL_PORT="5005"
 WORLD="c-track"
 HEADLESS="true"
-IMAGE="aware4docker/realgazebo:1.3-rc1"
+IMAGE="aware4docker/realgazebo:aware4"
 DEV_MODE=false
 DRY_RUN=false
 VEHICLE_YAML=""

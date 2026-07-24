@@ -4,8 +4,8 @@
 #
 # Build & publish:
 #   docker build -f docker/Dockerfile.publish --no-cache \
-#       --build-arg ROS2_REF=v1.3-rc1 -t aware4docker/realgazebo:1.3-rc1 docker/
-#   docker push aware4docker/realgazebo:1.3-rc1
+#       --build-arg ROS2_REF=aware4 -t aware4docker/realgazebo:aware4 docker/
+#   docker push aware4docker/realgazebo:aware4
 ARG BASE_IMAGE=aware4docker/realgazebo:1.2
 FROM ${BASE_IMAGE}
 ARG ROS2_REF=ue5.7
