@@ -177,8 +177,8 @@ RUN colcon mixin add default \
 
 RUN git config --global http.postBuffer 524288000
 
-# Install Micro XRCE-DDS Agent v2.4.3
-RUN git clone --branch v3.0.1 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git /tmp/Micro-XRCE-DDS-Agent \
+# Install Micro XRCE-DDS Agent (v2.4.3 = the fleet-validated line)
+RUN git clone --branch v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git /tmp/Micro-XRCE-DDS-Agent \
     && cd /tmp/Micro-XRCE-DDS-Agent \
     && mkdir build \
     && cd build \
@@ -198,11 +198,14 @@ USER user
 RUN mkdir realgazebo
 WORKDIR /home/user/realgazebo
 
-#ARG CACHEBUST=1
-RUN git clone --branch feature/gz-hitl-bridge https://github.com/SUV-Lab/RealGazebo-PX4.git --recursive \
-    && git clone --branch feature/gz-hitl-bridge https://github.com/SUV-Lab/RealGazebo-ROS2.git --recursive
+# Bake refs: the versioned line by default; the aware4 bake overrides both
+# with --build-arg PX4_REF=aware4 ROS2_REF=aware4.
+ARG PX4_REF=realgazebo-1.16.0
+ARG ROS2_REF=realgazebo-1.16.0
+RUN git clone --branch ${PX4_REF} https://github.com/SUV-Lab/RealGazebo-PX4.git --recursive \
+    && git clone --branch ${ROS2_REF} https://github.com/SUV-Lab/RealGazebo-ROS2.git --recursive
 
-RUN cd /home/user/realgazebo/RealGazebo-PX4 && ./Tools/setup/ubuntu.sh --no-nuttx
+RUN cd /home/user/realgazebo/RealGazebo-PX4 && ./Tools/setup/ubuntu.sh
 
 USER root
 RUN apt-get update \
