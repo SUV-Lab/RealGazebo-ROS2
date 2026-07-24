@@ -145,7 +145,7 @@ docker run ${GPU_OPTION} ${GPU_RUNTIME} -d -it --privileged \
     -v /dev:/dev:rw \
     --hostname $(hostname) \
     --network host \
-    --name "$container_name" "${IMAGE:-mdeagewt/realgazebo:ue5.7-hitl}"
+    --name "$container_name" "${IMAGE:-aware4docker/realgazebo:1.3-rc1}"
 
 HEADLESS_ARG="true"
 if [[ "$USE_GUI" == "true" ]]; then

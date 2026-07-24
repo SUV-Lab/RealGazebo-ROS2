@@ -4,7 +4,7 @@
 # reproducibly with docker/Dockerfile.publish instead.
 #
 # Build (from the repo root; the tag shadows the published image):
-#   docker build -f docker/Dockerfile.dev -t mdeagewt/realgazebo:ue5.7 .
+#   docker build -f docker/Dockerfile.dev -t aware4docker/realgazebo:1.3-rc1 .
 FROM aware4docker/realgazebo:1.2
 
 USER user

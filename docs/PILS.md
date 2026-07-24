@@ -41,7 +41,7 @@ watch, and the remote peer may restart freely.
 
 ## PILS PC side
 
-One-time prep: docker + the fleet image (`mdeagewt/realgazebo:ue5.7`).
+One-time prep: docker + the fleet image (`aware4docker/realgazebo:1.3-rc1`).
 Then one line per vehicle, **after** the sim is up (the container waits up
 to 30 s for the world, then gives up):
 

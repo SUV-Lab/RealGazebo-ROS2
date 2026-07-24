@@ -36,7 +36,7 @@ class ManagerNode(Node):
         # execution backend: how a spawned vehicle is materialized
         # ('subprocess' = monolithic mode, 'docker' = one container per vehicle)
         self.declare_parameter('backend', 'subprocess')
-        self.declare_parameter('docker_image', 'mdeagewt/realgazebo:ue5.7')
+        self.declare_parameter('docker_image', 'aware4docker/realgazebo:1.3-rc1')
         self.declare_parameter('docker_gazebo_network', 'gazebo-network')
         self.declare_parameter('docker_vehicle_network', 'vehicle-network')
         self.declare_parameter('mavlink_gcs_ip', '172.17.0.1')
