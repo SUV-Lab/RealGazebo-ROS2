@@ -1,0 +1,36 @@
+# TABLE II fault scenario.
+#
+# Six IMU channels faulted over a 20 s window. Magnitudes are in FRD, matching
+# the paper and px4_msgs/SensorCombined.
+#
+#   f_Ax  Bias         3                            m/s^2
+#   f_Ay  Drift        0.15*(t-10)                  m/s^2
+#   f_Az  Oscillation  3*sin(0.4*pi*(t-10))         m/s^2
+#   f_p   Bias         3*pi/180                     rad/s
+#   f_q   Oscillation  (3*pi/180)*sin(0.4*pi*(t-10)) rad/s
+#   f_r   Drift        (0.15*pi/180)*(t-10)         rad/s
+#
+# omega = 0.4*pi rad/s  ->  frequency = 0.2 Hz, so the 20 s window spans exactly
+# four whole periods and the oscillation is continuous at both edges.
+#
+# time_ref: on_command means t=0 is the moment the spec is accepted, NOT world
+# start. Trigger this once the vehicle is in stable hover, and the window reads
+# as "10 s clean, then 20 s faulted".
+
+frame: FRD
+time_ref: on_command
+enable: true
+
+defaults:
+  t_start: 10.0
+  t_end: 30.0
+  ramp_in: 0.0
+  on_exit: snap
+
+channels:
+  - {channel: ax, type: bias,        p0: 3.0}
+  - {channel: ay, type: drift,       p0: 0.15}
+  - {channel: az, type: oscillation, p0: 3.0,                   p1: 0.2, p2: 0.0}
+  - {channel: p,  type: bias,        p0: 0.05235987755982988}
+  - {channel: q,  type: oscillation, p0: 0.05235987755982988,   p1: 0.2, p2: 0.0}
+  - {channel: r,  type: drift,       p0: 0.0026179938779914945}

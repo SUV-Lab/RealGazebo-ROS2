@@ -13,6 +13,7 @@ find_package(gz-common5 REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(realgazebo_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -77,6 +78,28 @@ target_link_libraries(ServoFailureROS2
 ament_target_dependencies(ServoFailureROS2
   rclcpp
   std_msgs
+)
+
+# Build ImuFaultROS2 plugin
+add_library(ImuFaultROS2 SHARED
+  plugins/imu_fault_ros2/ImuFaultSystem.cpp
+)
+
+target_include_directories(ImuFaultROS2 PRIVATE
+  plugins/imu_fault_ros2
+  plugins/fault_core
+)
+
+target_link_libraries(ImuFaultROS2
+  gz-sim8::gz-sim8
+  gz-plugin2::gz-plugin2
+  gz-common5::gz-common5
+)
+
+ament_target_dependencies(ImuFaultROS2
+  rclcpp
+  std_msgs
+  realgazebo_msgs
 )
 
 # Get git version tag
@@ -192,7 +215,7 @@ target_link_libraries(image_receiver_node
   ${OpenCV_LIBS}
 )
 
-install(TARGETS RealGazebo MotorFailureROS2 ServoFailureROS2 image_receiver_node
+install(TARGETS RealGazebo MotorFailureROS2 ServoFailureROS2 ImuFaultROS2 image_receiver_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -214,6 +237,16 @@ install(PROGRAMS
 )
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+
+  # Fault waveform maths — pure C++, no simulator needed.
+  ament_add_gtest(test_fault_channel_model
+    test/test_fault_channel_model.cpp
+  )
+  target_include_directories(test_fault_channel_model PRIVATE
+    plugins/fault_core
+  )
+
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files

@@ -72,6 +72,15 @@
       <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
       <motorType>velocity</motorType>
     </plugin>
+    <!-- The IMU sensor itself lives in PX4's x500_base model, merge-included
+         above. This plugin never touches that SDF: it mutates the runtime ECM
+         components, so the inherited sensor works the same as a locally
+         declared one. Runs after Physics (priority 0). Absent or disabled, the
+         vehicle flies on clean IMU data. -->
+    <plugin filename="ImuFaultROS2" name="custom::ImuFaultROS2System">
+      <sensorName>imu_sensor</sensorName>
+      <frame>frd</frame>
+    </plugin>
     <plugin filename="libRealGazebo.so" name="custom::RealGazebo">
       <unreal_ip>{{ unreal_ip }}</unreal_ip>
       <unreal_port>{{ unreal_port }}</unreal_port>

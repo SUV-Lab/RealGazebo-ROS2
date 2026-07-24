@@ -1315,6 +1315,13 @@
         <servoJoint name="rudder_joint"/>
       </servoJointList>
     </plugin>
+    <!-- Runs after Physics (priority 0) so it can corrupt the IMU values the
+         stock Imu system publishes. Absent or disabled, the vehicle flies on
+         clean IMU data exactly as it did before this plugin existed. -->
+    <plugin filename="ImuFaultROS2" name="custom::ImuFaultROS2System">
+      <sensorName>imu_sensor</sensorName>
+      <frame>frd</frame>
+    </plugin>
     <plugin filename="libRealGazebo.so" name="custom::RealGazebo">
       <unreal_ip>{{ unreal_ip }}</unreal_ip>
       <unreal_port>{{ unreal_port }}</unreal_port>
