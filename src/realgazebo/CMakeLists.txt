@@ -121,6 +121,20 @@ else()
   message(STATUS "Using model version: ${MODEL_VERSION}")
 endif()
 
+# --- aware4 line only -------------------------------------------------------
+# This branch ships remodelled c-track/vils/urban meshes that the release tags
+# it descends from do not have: `git describe` resolves to v1.2 here, and v1.2
+# must keep the old set so that tag stays reproducible. Pin the mesh set
+# explicitly instead of teaching the generic resolver about branch names.
+#
+# Deliberately a hardcoded string on a branch-local line: it states a fact
+# about *this* branch and never reaches the release lines. A merge into (or
+# from) a release line conflicts here, which is the right moment to decide
+# which mesh set the result should use.
+set(MODEL_VERSION "aware4")
+message(STATUS "aware4 line: pinning model version to '${MODEL_VERSION}'")
+# ---------------------------------------------------------------------------
+
 # Download large STL files if they don't exist
 set(MESH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/c-track/meshes")
 set(C_TRACK_STL "${MESH_DIR}/c-track.stl")
