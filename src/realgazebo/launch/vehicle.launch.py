@@ -154,6 +154,7 @@ def launch_setup(context, *args, **kwargs):
 
     instance_id = int(LaunchConfiguration('instance_id').perform(context))
     vehicle_type = LaunchConfiguration('vehicle_type').perform(context)
+    world = LaunchConfiguration('world').perform(context)
     spawnpoint_str = LaunchConfiguration('spawnpoint').perform(context)
     px4_path = LaunchConfiguration('px4_path').perform(context)
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
@@ -249,7 +250,7 @@ def launch_setup(context, *args, **kwargs):
             PathJoinSubstitution([gz_sim_pkg, 'launch', 'gz_spawn_model.launch.py'])
         ),
         launch_arguments={
-            'world': 'c-track',
+            'world': world,
             'file': model_file_path,
             'entity_name': f'{vehicle_type}_{instance_id}',
             'x': str(spawnpoint[0]),
@@ -270,7 +271,7 @@ def launch_setup(context, *args, **kwargs):
         'PX4_SYS_AUTOSTART': autostart_id,
         'PX4_GZ_MODEL_NAME': f'{vehicle_type}_{instance_id}',
         'PX4_UXRCE_DDS_NS': f'vehicle{instance_id + 1}',
-        'PX4_GZ_WORLD': 'c-track'
+        'PX4_GZ_WORLD': world
     }
 
     px4_binary = f"{px4_path}/build/px4_sitl_default/bin/px4"
@@ -317,7 +318,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{
             'instance_id': instance_id,
             'network_interface': 'eth1',
-            'gz_world_name': 'c-track',
+            'gz_world_name': world,
             'vehicle_models': vehicle_models_str,
             'enable_on_startup': True,
             'max_latency_ms': 1000.0,
@@ -356,7 +357,7 @@ def launch_setup(context, *args, **kwargs):
         os.path.join(current_package_path, 'models'),
         os.path.join(gazebo_path, 'models'),
     ]
-    sensor_bridges = get_sensor_bridges(vehicle_type, instance_id, 'c-track', model_search_paths)
+    sensor_bridges = get_sensor_bridges(vehicle_type, instance_id, world, model_search_paths)
     if sensor_bridges:
         os.makedirs('/tmp/bridges', exist_ok=True)
         bridge_cfg_path = f'/tmp/bridges/{vehicle_type}_{instance_id}.yaml'
@@ -414,6 +415,19 @@ def generate_launch_description():
             'spawnpoint',
             default_value='0,0,0,0',
             description='Spawn position as "x,y,z,yaw"'
+        )
+    )
+
+    # Must match the gz world the shared server is actually running: this
+    # container spawns its model into /world/<world>/create and namespaces
+    # PX4, network_sim and every sensor bridge under the same name. The
+    # manager passes its own `world` parameter down (see backends.py); the
+    # default only covers a hand-run container.
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'world',
+            default_value='c-track',
+            description='Name of the gz world this vehicle joins'
         )
     )
 

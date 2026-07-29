@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 
 from jinja2 import Environment, FileSystemLoader
 
+from realgazebo.worlds import resolve_world_file
+
 from collections import defaultdict
 
 from ament_index_python import get_package_prefix
@@ -155,7 +157,7 @@ def get_autostart_id(vehicle_type, px4_build_path):
     
     return vehicle_autostart_map[vehicle_type]
 
-def create_px4_command(vehicle, vehicle_type):
+def create_px4_command(vehicle, vehicle_type, world):
     """Create proper PX4 command with environment variables and arguments"""
     autostart_id = get_autostart_id(vehicle_type, vehicle['build_target'])
     
@@ -164,7 +166,7 @@ def create_px4_command(vehicle, vehicle_type):
         'PX4_GZ_STANDALONE': '1',
         'PX4_SYS_AUTOSTART': autostart_id,
         'PX4_UXRCE_DDS_NS' : f"vehicle{vehicle['id'] + 1}",
-        'PX4_GZ_WORLD' : 'c-track'
+        'PX4_GZ_WORLD' : world
     }
     
     # PX4 binary path
@@ -280,6 +282,7 @@ def launch_setup(context, *args, **kwargs):
     headless = LaunchConfiguration('headless').perform(context).lower() == 'true'
     verbose = LaunchConfiguration('verbose').perform(context).lower() == 'true'
     world = LaunchConfiguration('world').perform(context)
+    terrain = LaunchConfiguration('terrain').perform(context)
     if not validate_yaml(vehicle_str):
         exit(1)
 
@@ -312,14 +315,17 @@ def launch_setup(context, *args, **kwargs):
 
     uxrce_dds_synct_param_env = SetEnvironmentVariable('PX4_PARAM_UXRCE_DDS_SYNCT', '0')
     
-    # generate world file to /tmp/c-track.sdf if needed
+    # Render the shipped c-track terrain model with the requested crop.
+    # `terrain` only picks which STL that model shows (c-track = full site,
+    # urban/vils = smaller crops of the same site, so a small-scale run need
+    # not load the full 1.15 GB mesh). It never touches the gz world name.
     env = Environment(loader=FileSystemLoader(os.path.join(current_package_path, 'models', 'c-track')))
     world_model = env.get_template(f'model.sdf.jinja')
-    output_world = world_model.render(world=world)
+    output_world = world_model.render(terrain=terrain)
     world_model_path = os.path.join(current_package_path, 'models', 'c-track', 'model.sdf')
     with open(world_model_path, 'w') as f:
         f.write(output_world)
-        print(f'c-track.sdf is generated')
+        print(f'c-track model.sdf generated (terrain={terrain})')
 
     # gz-transport advertise address. 127.0.0.1 keeps the world host-local
     # (default); a fleet with PILS vehicles must advertise a LAN address so
@@ -329,7 +335,7 @@ def launch_setup(context, *args, **kwargs):
 
     gz_sim_pkg = get_package_share_directory('ros_gz_sim')
 
-    world_file_path = os.path.join(current_package_path, 'worlds', f'c-track.sdf')
+    world_file_path = resolve_world_file(current_package_path, world)
 
     verbose_level = 4 if verbose else 1
     gazebo_node = IncludeLaunchDescription(
@@ -363,7 +369,7 @@ def launch_setup(context, *args, **kwargs):
         spawn_entity = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution([os.path.join(gz_sim_pkg, 'launch', 'gz_spawn_model.launch.py')])),
             launch_arguments={
-                'world': 'c-track',
+                'world': world,
                 'file': f'/tmp/models/{vehicle_type}.sdf',
                 'entity_name': f'{vehicle_type}_{vehicle["id"]}',
                 'x': f'{float(vehicle["spawnpoint"][0])}',
@@ -378,7 +384,7 @@ def launch_setup(context, *args, **kwargs):
 
         # Create PX4 process with proper autostart ID
         if vehicle_type not in without_px4:
-            px4_cmd, px4_env = create_px4_command(vehicle, vehicle_type)
+            px4_cmd, px4_env = create_px4_command(vehicle, vehicle_type, world)
 
             px4_process = ExecuteProcess(
                 cmd=px4_cmd,
@@ -409,7 +415,7 @@ def launch_setup(context, *args, **kwargs):
         spawn_entity = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution([os.path.join(gz_sim_pkg, 'launch', 'gz_spawn_model.launch.py')])),
             launch_arguments={
-                'world': 'c-track',
+                'world': world,
                 'file': f'/tmp/models/{obstacle_type}.sdf',
                 'entity_name': f'{obstacle_type}_{obstacle["id"]}',
                 'x': f'{float(obstacle["spawnpoint"][0])}',
@@ -451,7 +457,7 @@ def launch_setup(context, *args, **kwargs):
     ]
     for vehicle in vehicle_lst:
         vehicle_type = vehicle['type']
-        gz_bridge_entries.extend(get_sensor_bridges(vehicle_type, vehicle['id'], 'c-track', model_search_paths))
+        gz_bridge_entries.extend(get_sensor_bridges(vehicle_type, vehicle['id'], world, model_search_paths))
 
     os.makedirs('/tmp/bridges', exist_ok=True)
     combined_cfg_path = '/tmp/bridges/combined.yaml'
@@ -569,8 +575,18 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'world',
             default_value='c-track',
-            description='type of world',
-            choices=['c-track', 'urban', 'vils']
+            description='World to run: loads worlds/<world>.sdf, whose '
+                        '<world name=> must equal <world>'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'terrain',
+            default_value='c-track',
+            description='Which STL the c-track terrain model shows '
+                        '(c-track = full site, urban/vils = smaller crops). '
+                        'Ignored by worlds that do not include model://c-track'
         )
     )
 

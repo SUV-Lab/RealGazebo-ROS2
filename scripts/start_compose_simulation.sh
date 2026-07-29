@@ -24,7 +24,10 @@
 #   --unreal-ip IP   Unreal Engine host (default: host.docker.internal;
 #                    localhost/127.0.0.1 is rewritten automatically)
 #   --unreal-port P  Unreal Engine UDP port (default: 5005)
-#   --world W        World: c-track | urban | vils (default: c-track)
+#   --world W        World to run: loads worlds/<W>.sdf (default: c-track)
+#   --terrain T      Which STL the c-track terrain shows: c-track (full site)
+#                    | urban | vils (smaller crops, so a small-scale run does
+#                    not load the full 1.15 GB mesh). Does NOT change the world
 #   --image IMG      Manager/vehicle image (default: aware4docker/realgazebo:aware4)
 set -euo pipefail
 ORIG_PWD="$(pwd)"
@@ -33,6 +36,7 @@ cd "$(dirname "$0")/.."
 UNREAL_IP="host.docker.internal"
 UNREAL_PORT="5005"
 WORLD="c-track"
+TERRAIN="c-track"
 HEADLESS="true"
 IMAGE="aware4docker/realgazebo:aware4"
 DEV_MODE=false
@@ -47,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         --unreal-ip)   UNREAL_IP="$2"; shift 2 ;;
         --unreal-port) UNREAL_PORT="$2"; shift 2 ;;
         --world)       WORLD="$2"; shift 2 ;;
+        --terrain)     TERRAIN="$2"; shift 2 ;;
         --image)       IMAGE="$2"; shift 2 ;;
         --dry-run)     DRY_RUN=true; shift ;;
         -h|--help)     grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -110,11 +115,11 @@ if [[ "$HEADLESS" == "false" ]]; then
     xhost +local: >/dev/null 2>&1 || echo "Warning: xhost failed (no X server?)"
 fi
 
-export DISPLAY="${DISPLAY:-:0}" HEADLESS WORLD UNREAL_IP UNREAL_PORT \
+export DISPLAY="${DISPLAY:-:0}" HEADLESS WORLD TERRAIN UNREAL_IP UNREAL_PORT \
        MAVLINK_GCS_IP MANAGER_YAML MANAGER_IMAGE="$IMAGE" VEHICLE_IMAGE="$IMAGE"
 
 if $DRY_RUN; then
-    echo "[dry-run] HEADLESS=$HEADLESS WORLD=$WORLD UNREAL_IP=$UNREAL_IP:$UNREAL_PORT"
+    echo "[dry-run] HEADLESS=$HEADLESS WORLD=$WORLD TERRAIN=$TERRAIN UNREAL_IP=$UNREAL_IP:$UNREAL_PORT"
     echo "[dry-run] MANAGER_YAML=${MANAGER_YAML:-<none>} IMAGE=$IMAGE DEV=$DEV_MODE"
     exit 0
 fi

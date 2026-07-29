@@ -80,7 +80,10 @@ services:
     # give the manager time to despawn every vehicle on `compose down`
     stop_grace_period: 30s
     healthcheck:
-      test: ["CMD-SHELL", "su -s /bin/bash user -c 'source /opt/ros/jazzy/setup.bash && timeout 5 gz topic -e -t /world/c-track/clock -n 1' > /dev/null 2>&1"]
+      # Must follow WORLD: the clock topic is namespaced by the gz world name,
+      # so a hardcoded world here reports "healthy" for a server that is
+      # actually running something else - or never goes healthy at all.
+      test: ["CMD-SHELL", "su -s /bin/bash user -c 'source /opt/ros/jazzy/setup.bash && timeout 5 gz topic -e -t /world/${WORLD:-c-track}/clock -n 1' > /dev/null 2>&1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -92,6 +95,7 @@ services:
       sigterm_timeout:=20 sigkill_timeout:=10
       $${MANAGER_YAML:+yaml_path:=$$MANAGER_YAML}
       headless:=${HEADLESS:-true} world:=${WORLD:-c-track}
+      terrain:=${TERRAIN:-c-track}
       px4_path:=/home/user/realgazebo/RealGazebo-PX4
       unreal_ip:=${UNREAL_IP:-host.docker.internal}
       unreal_port:=${UNREAL_PORT:-5005}

@@ -275,11 +275,18 @@ class DockerBackend:
         if roster is None:
             roster = sorted(set(self._roster_fn()) | {model_name})
         x, y, z = position
+        # world:= is not optional. The container spawns its own model (unlike
+        # the subprocess backend, where the manager does it), so if it is left
+        # to vehicle.launch.py's default the container and the manager address
+        # different worlds the moment `world` is not 'c-track' - the model
+        # lands in one world while every despawn is sent to the other, and
+        # _despawn_one swallows the failure.
         command = (
             'source /opt/ros/jazzy/setup.bash && '
             'source /home/user/realgazebo/RealGazebo-ROS2/install/setup.bash && '
             f'ros2 launch realgazebo vehicle.launch.py '
             f'instance_id:={spec.vehicle_id} vehicle_type:={spec.vehicle_type} '
+            f'world:={world} '
             f'spawnpoint:={x},{y},{z},{rpy[2]} px4_path:={self._px4_path} '
             f'unreal_ip:={unreal_ip} unreal_port:={unreal_port} '
             f'vehicle_models:={",".join(roster)}'

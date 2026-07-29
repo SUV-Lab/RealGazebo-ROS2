@@ -19,6 +19,7 @@ UNREAL_IP="127.0.0.1"
 UNREAL_IP_SET=false
 WORLD_TYPE="c-track"
 WORLD_TYPE_SET=false
+TERRAIN="c-track"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -39,18 +40,19 @@ while [[ $# -gt 0 ]]; do
             echo "Unreal IP: $UNREAL_IP"
             shift 2
             ;;
+        # No allow-list on either of these: a world is any worlds/<name>.sdf
+        # and a terrain is any models/c-track/meshes/<name>.stl, both resolved
+        # at launch. Listing c-track's crop names here would mean teaching this
+        # script about them, and re-teaching it every time one is added.
         --world)
-            case $2 in
-                c-track|urban|vils)
-                    WORLD_TYPE="$2"
-                    WORLD_TYPE_SET=true
-                    echo "World type: $WORLD_TYPE"
-                    ;;
-                *)
-                    echo "Error: Invalid world type '$2'. Valid options: c-track, urban, vils"
-                    exit 1
-                    ;;
-            esac
+            WORLD_TYPE="$2"
+            WORLD_TYPE_SET=true
+            echo "World: $WORLD_TYPE"
+            shift 2
+            ;;
+        --terrain)
+            TERRAIN="$2"
+            echo "Terrain: $TERRAIN"
             shift 2
             ;;
         --help|-h)
@@ -64,7 +66,11 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-gpu          Disable GPU acceleration"
             echo "  --gui             Enable Gazebo GUI (default: headless)"
             echo "  --unreal-ip IP    Unreal Engine server IP (default: 127.0.0.1)"
-            echo "  --world TYPE      World type: c-track, urban, vils (default: c-track)"
+            echo "  --world NAME      World to run: loads worlds/<NAME>.sdf (default: c-track)"
+            echo "  --terrain NAME    Which STL the c-track terrain shows:"
+            echo "                    c-track (full site) | urban | vils (smaller"
+            echo "                    crops, so a small-scale run does not load the"
+            echo "                    full 1.15 GB mesh). Does NOT change the world."
             exit 0
             ;;
         *)
@@ -82,18 +88,10 @@ while [[ $# -gt 0 ]]; do
                 UNREAL_IP_SET=true
                 echo "Unreal IP: $UNREAL_IP"
             elif [[ "$WORLD_TYPE_SET" == "false" ]]; then
-                # Third positional arg: world type
-                case $1 in
-                    c-track|urban|vils)
-                        WORLD_TYPE="$1"
-                        WORLD_TYPE_SET=true
-                        echo "World type: $WORLD_TYPE"
-                        ;;
-                    *)
-                        echo "Error: Invalid world type '$1'. Valid options: c-track, urban, vils"
-                        exit 1
-                        ;;
-                esac
+                # Third positional arg: world
+                WORLD_TYPE="$1"
+                WORLD_TYPE_SET=true
+                echo "World: $WORLD_TYPE"
             else
                 echo "Error: Unknown argument: $1"
                 exit 1
@@ -154,7 +152,7 @@ fi
 
 # Manager-driven monolithic launch (vehicles run as subprocesses in this
 # container). A YAML only adds a boot fleet; UDP spawn works either way.
-LAUNCH_ARGS="unreal_ip:=$UNREAL_IP headless:=$HEADLESS_ARG world:=$WORLD_TYPE"
+LAUNCH_ARGS="unreal_ip:=$UNREAL_IP headless:=$HEADLESS_ARG world:=$WORLD_TYPE terrain:=$TERRAIN"
 if [[ -n "$CONFIG_FILE" ]]; then
     docker cp "$CONFIG_FILE" "$container_name":/home/user/
     LAUNCH_ARGS="yaml_path:=/home/user/$(basename "$CONFIG_FILE") $LAUNCH_ARGS"

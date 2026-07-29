@@ -3,9 +3,13 @@ install
 log
 __pycache__
 
-# Large STL mesh files (downloaded by CMake)
+# Large STL mesh files (downloaded by CMake, see WORLD_CTRACK).
+# urban.stl belongs here too: it used to be the one tracked mesh, which meant
+# a build whose checksum differed from the server's silently rewrote a tracked
+# 40 MB file and left every working tree dirty.
 c-track.stl
 vils.stl
+urban.stl
 
 # Legacy artifact of the retired generate_compose flow
 docker-compose.override.yml
