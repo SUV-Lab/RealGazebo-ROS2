@@ -140,8 +140,14 @@ endif()
 # later, at `terrain:=`, instead of here.
 option(WORLD_CTRACK "Download the c-track terrain meshes (OFF: bring your own world)" ON)
 
-# Download large STL files if they don't exist
+# Download large STL files if they don't exist.
+# MAKE_DIRECTORY is required, not defensive: every mesh here is gitignored, so
+# models/c-track/meshes/ has no tracked file and git does not create it on a
+# fresh clone. Without this, curl has nowhere to write and fails with
+# "(23) Failure writing output to destination" - which only ever reproduces on
+# a clean checkout, never in a working tree that already has the meshes.
 set(MESH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/c-track/meshes")
+file(MAKE_DIRECTORY "${MESH_DIR}")
 set(C_TRACK_STL "${MESH_DIR}/c-track.stl")
 set(VILS_STL "${MESH_DIR}/vils.stl")
 set(URBAN_STL "${MESH_DIR}/urban.stl")
