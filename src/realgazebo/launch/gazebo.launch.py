@@ -10,6 +10,8 @@ import glob
 
 from jinja2 import Environment, FileSystemLoader
 
+from realgazebo.worlds import resolve_world_file
+
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
 
 from launch import LaunchDescription
@@ -33,6 +35,7 @@ def launch_setup(context, *args, **kwargs):
     headless = LaunchConfiguration('headless').perform(context).lower() == 'true'
     verbose = LaunchConfiguration('verbose').perform(context).lower() == 'true'
     world = LaunchConfiguration('world').perform(context)
+    terrain = LaunchConfiguration('terrain').perform(context)
     px4_path = LaunchConfiguration('px4_path').perform(context)
     unreal_ip = LaunchConfiguration('unreal_ip').perform(context)
     unreal_port = LaunchConfiguration('unreal_port').perform(context)
@@ -61,14 +64,22 @@ def launch_setup(context, *args, **kwargs):
         f"{px4_path}/src/modules/simulation/gz_bridge/server.config"
     )
 
-    # Generate world file from Jinja template
+    # Render the shipped c-track terrain model with the requested crop.
+    # `terrain` picks which STL that model shows: 'c-track' is the full site,
+    # 'urban'/'vils' are smaller crops of the SAME site, kept so a small-scale
+    # run does not have to load the full 1.15 GB mesh into Gazebo.
+    #
+    # It is deliberately independent of `world`: a terrain swap must never
+    # change the gz world name (see realgazebo/worlds.py). If you run your own
+    # world it will not include model://c-track, so this render is inert for
+    # you - a small XML write, nothing loaded.
     env = Environment(loader=FileSystemLoader(os.path.join(current_package_path, 'models', 'c-track')))
     world_model = env.get_template('model.sdf.jinja')
-    output_world = world_model.render(world=world)
+    output_world = world_model.render(terrain=terrain)
     world_model_path = os.path.join(current_package_path, 'models', 'c-track', 'model.sdf')
     with open(world_model_path, 'w') as f:
         f.write(output_world)
-        print(f'c-track model.sdf generated')
+        print(f'c-track model.sdf generated (terrain={terrain})')
 
     # Render EVERY vehicle/obstacle template into this container's
     # /tmp/models: spawn requests pass a /tmp/models/<type>.sdf path that the
@@ -101,7 +112,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Launch Gazebo
     gz_sim_pkg = get_package_share_directory('ros_gz_sim')
-    world_file_path = os.path.join(current_package_path, 'worlds', 'c-track.sdf')
+    world_file_path = resolve_world_file(current_package_path, world)
 
     verbose_level = 4 if verbose else 1
     gz_args = f'--verbose={verbose_level} -r -s {world_file_path}' if headless else f'--verbose={verbose_level} -r {world_file_path}'
@@ -152,12 +163,30 @@ def generate_launch_description():
         )
     )
 
+    # world and terrain are independent. `world` decides WHICH WORLD RUNS -
+    # it selects worlds/<world>.sdf and fixes the gz world name that the
+    # manager, PX4 and the bridges all address. `terrain` only decides which
+    # STL the shipped c-track terrain model shows, and never touches that name.
+    # Neither has a choices= list on purpose: adding a world means dropping in
+    # worlds/<name>.sdf, adding a terrain crop means dropping in
+    # models/c-track/meshes/<name>.stl. Nothing here should have to be taught
+    # the names of c-track's crops.
     declared_arguments.append(
         DeclareLaunchArgument(
             'world',
             default_value='c-track',
-            description='World type',
-            choices=['c-track', 'urban', 'vils']
+            description='World to run: loads worlds/<world>.sdf, whose '
+                        '<world name=> must equal <world>'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'terrain',
+            default_value='c-track',
+            description='Which STL the c-track terrain model shows '
+                        '(c-track = full site, urban/vils = smaller crops). '
+                        'Ignored by worlds that do not include model://c-track'
         )
     )
 

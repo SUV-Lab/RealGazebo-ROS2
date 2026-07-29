@@ -25,6 +25,7 @@ services:
       sigterm_timeout:=20 sigkill_timeout:=10
       $${MANAGER_YAML:+yaml_path:=$$MANAGER_YAML}
       headless:=${HEADLESS:-true} world:=${WORLD:-c-track}
+      terrain:=${TERRAIN:-c-track}
       px4_path:=/home/user/realgazebo/RealGazebo-PX4
       unreal_ip:=${UNREAL_IP:-host.docker.internal}
       unreal_port:=${UNREAL_PORT:-5005}

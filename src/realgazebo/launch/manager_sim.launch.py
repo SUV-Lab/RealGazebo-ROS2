@@ -23,7 +23,11 @@ def generate_launch_description():
             default_value='',
             description='Vehicle YAML to spawn at boot; '
                         'empty (default) = no boot spawn, UDP-only mode'),
+        # `world` picks worlds/<world>.sdf and IS the gz world name that the
+        # manager addresses; `terrain` only swaps the c-track terrain STL and
+        # must not touch that name. See gazebo.launch.py for the full note.
         DeclareLaunchArgument('world', default_value='c-track'),
+        DeclareLaunchArgument('terrain', default_value='c-track'),
         DeclareLaunchArgument('unreal_ip', default_value='127.0.0.1'),
         DeclareLaunchArgument('unreal_port', default_value='5005'),
         DeclareLaunchArgument(
@@ -100,6 +104,7 @@ def generate_launch_description():
         launch_arguments={
             'headless': LaunchConfiguration('headless'),
             'world': LaunchConfiguration('world'),
+            'terrain': LaunchConfiguration('terrain'),
             'px4_path': LaunchConfiguration('px4_path'),
             'unreal_ip': LaunchConfiguration('unreal_ip'),
             'unreal_port': LaunchConfiguration('unreal_port'),
