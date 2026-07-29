@@ -121,6 +121,25 @@ else()
   message(STATUS "Using model version: ${MODEL_VERSION}")
 endif()
 
+# --- c-track terrain meshes -------------------------------------------------
+# The c-track asset pack (c-track.stl 1.15 GB + vils.stl + urban.stl, ~1.25 GB
+# total) is the terrain this project ships. vils/urban are deliberate crops of
+# the same c-track site, kept so a small-scale run does not have to load the
+# full 1.15 GB mesh into Gazebo; they are selected at launch with `terrain:=`,
+# NOT `world:=` (see launch/gazebo.launch.py).
+#
+# ON  (default): fetch all three. Right for anyone actually flying at c-track.
+# OFF: skip the download entirely. Set this when you only want the RealGazebo
+#      framework (plugins, manager, PX4 wiring) and bring your own world -
+#      drop worlds/<name>.sdf in and launch with `world:=<name>`. Your world
+#      never includes model://c-track, so the meshes are dead weight: they cost
+#      ~1.25 GB of download, disk, and (via docker/Dockerfile) image size.
+#
+# Deliberately all-or-nothing rather than a per-mesh list: the three are one
+# asset pack for one site, and a partial set only produces a launch that fails
+# later, at `terrain:=`, instead of here.
+option(WORLD_CTRACK "Download the c-track terrain meshes (OFF: bring your own world)" ON)
+
 # Download large STL files if they don't exist
 set(MESH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/c-track/meshes")
 set(C_TRACK_STL "${MESH_DIR}/c-track.stl")
@@ -132,20 +151,24 @@ set(BASE_URL "https://realgazebo.cbnu.ac.kr/download/${MODEL_VERSION}")
 # server yet (e.g. a fresh tag before its release upload). Meshes change
 # rarely, so the newest published set is the right default - and a WARN
 # beats every checkout failing FATAL on a missing path. Probed once via a
-# known checksum file.
-execute_process(
-  COMMAND curl -fsI --retry 3 --retry-delay 2 --connect-timeout 10
-          "${BASE_URL}/c-track.stl.md5"
-  RESULT_VARIABLE version_probe
-  OUTPUT_QUIET
-  ERROR_QUIET
-)
-if(NOT version_probe EQUAL 0)
-  message(WARNING
-    "No mesh directory for '${MODEL_VERSION}' on the server; "
-    "falling back to 'latest'")
-  set(MODEL_VERSION "latest")
-  set(BASE_URL "https://realgazebo.cbnu.ac.kr/download/latest")
+# known checksum file. Skipped with WORLD_CTRACK=OFF: no download means no
+# reason to reach the mesh server at all (and no reason for a build behind a
+# firewall to stall on it).
+if(WORLD_CTRACK)
+  execute_process(
+    COMMAND curl -fsI --retry 3 --retry-delay 2 --connect-timeout 10
+            "${BASE_URL}/c-track.stl.md5"
+    RESULT_VARIABLE version_probe
+    OUTPUT_QUIET
+    ERROR_QUIET
+  )
+  if(NOT version_probe EQUAL 0)
+    message(WARNING
+      "No mesh directory for '${MODEL_VERSION}' on the server; "
+      "falling back to 'latest'")
+    set(MODEL_VERSION "latest")
+    set(BASE_URL "https://realgazebo.cbnu.ac.kr/download/latest")
+  endif()
 endif()
 
 # Function to download file with MD5 verification (using curl with retry)
@@ -206,14 +229,21 @@ function(download_with_verification filename)
   file(REMOVE ${MD5_FILE})
 endfunction()
 
-# Download c-track.stl with verification
-download_with_verification("c-track.stl")
+if(WORLD_CTRACK)
+  # Download c-track.stl with verification
+  download_with_verification("c-track.stl")
 
-# Download vils.stl with verification
-download_with_verification("vils.stl")
+  # Download vils.stl with verification
+  download_with_verification("vils.stl")
 
-# Download urban.stl with verification
-download_with_verification("urban.stl")
+  # Download urban.stl with verification
+  download_with_verification("urban.stl")
+else()
+  message(STATUS
+    "WORLD_CTRACK=OFF: skipping the c-track terrain meshes (~1.25 GB). "
+    "worlds/c-track.sdf cannot be launched in this build - supply your own "
+    "worlds/<name>.sdf and launch with world:=<name>.")
+endif()
 
 # Build image_receiver_node
 add_executable(image_receiver_node
