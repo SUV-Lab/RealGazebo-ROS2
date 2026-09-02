@@ -61,7 +61,7 @@ services:
       LOCAL_USER_ID: ""
       MANAGER_YAML: ${MANAGER_YAML:-}
     ports:
-      - "5006:5006/udp"   # UE / host -> manager spawn & despawn commands
+      - "5006:5006/udp"   # UE / host -> manager spawn / despawn / wind commands
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - /dev:/dev

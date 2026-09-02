@@ -16,11 +16,14 @@ from .spawn_core import (
 from .backends import make_backend, HitlBackend, PilsBackend
 from .entity import Entity
 from .registry import EntityRegistry
-from .protocol import parse_packet, DespawnCommand
+from .protocol import parse_packet, pack_wind, triage_batch, DespawnCommand
+from .wind import WindPublisher
 from .type_codes import scan_type_codes, type_for_code
 from .geometry import quat_to_euler
 
 SPAWN_STAGGER_SEC = 0.5
+# bounded wait for the WindEffects subscriber after advertising the wind topic
+WIND_SUBSCRIBER_WAIT_SEC = 2.0
 
 
 class ManagerNode(Node):
@@ -74,6 +77,10 @@ class ManagerNode(Node):
         self._clock_seen = False
         self._stop = False
         self._sock = None
+        self._wind = None  # WindPublisher, created once the gz server is up
+        # Last wind pushed to gz (enable, (vx, vy, vz)); the manager is the
+        # only writer, so this IS the world's current wind. Answers queries.
+        self._wind_state = (False, (0.0, 0.0, 0.0))
         self.create_subscription(Clock, '/clock', self._on_clock, 10)
         # watch spawned vehicles so a crashed PX4/container frees its slot
         self.create_timer(5.0, self._check_vehicles)
@@ -239,7 +246,48 @@ class ManagerNode(Node):
             f"{[r.entity.name for r in self.registry.records()]}")
 
     # -- runtime UDP trigger ----------------------------------------------
+    def _start_wind_publisher(self):
+        """Advertise the world wind topic once, on the main thread.
+
+        Runs after wait_for_clock(), so the gz server (and the WindEffects
+        system server.config loads into it) is up for discovery. Wind is
+        optional: any failure here disables wind commands only, spawning
+        must keep working.
+        """
+        world = self.get_parameter('world').value
+        try:
+            self._wind = WindPublisher(world)
+            # Discovery is asynchronous: give the WindEffects subscriber a
+            # moment to connect (a publish before that is dropped) and say
+            # once whether it is there at all.
+            deadline = time.monotonic() + WIND_SUBSCRIBER_WAIT_SEC
+            while (not self._wind.has_subscriber()
+                   and time.monotonic() < deadline):
+                time.sleep(0.05)
+            connected = self._wind.has_subscriber()
+        except Exception as exc:  # missing bindings, protobuf mismatch, ...
+            self._wind = None
+            self.get_logger().error(
+                f"wind commands disabled: gz python bindings unusable ({exc!r})")
+            return
+        if connected:
+            self.get_logger().info(
+                f"wind publisher ready on {self._wind.topic} "
+                "(WindEffects connected)")
+        else:
+            self.get_logger().warn(
+                f"wind publisher on {self._wind.topic} has no subscriber - "
+                "is gz-sim-wind-effects-system in server.config?")
+
     def start_udp_listener(self):
+        """Bind the command port and serve it; then bring up the wind publisher.
+
+        Runs BEFORE the boot-time YAML spawn: the first vehicle streams to
+        UE at once and UE answers with a wind-state query, which must find
+        this port open. A wind command arriving while the publisher is
+        still coming up is warned about, a query is answered as 'off' -
+        nothing is silently dropped.
+        """
         self.get_logger().info(f"entity type codes: {self._code_map}")
         port = self.get_parameter('spawn_udp_port').value
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -248,13 +296,14 @@ class ManagerNode(Node):
         self._sock.settimeout(0.5)
         threading.Thread(target=self._udp_loop, daemon=True).start()
         self.get_logger().info(f"listening for UDP spawn commands on :{port}")
+        self._start_wind_publisher()
 
     def _udp_loop(self):
         world = self.get_parameter('world').value
         default_px4 = self.get_parameter('default_px4_path').value
         while not self._stop:
             try:
-                data, _ = self._sock.recvfrom(2048)
+                data, sender = self._sock.recvfrom(2048)
             except socket.timeout:
                 continue
             except OSError:
@@ -265,26 +314,36 @@ class ManagerNode(Node):
             # the backlog one by one would replay stale teleports for
             # seconds after the user lets go. Acting on a batch lets
             # superseded poses collapse to the newest one instead.
-            batch = [data]
+            batch = [(data, sender)]
             self._sock.setblocking(False)
             try:
                 while len(batch) < 512:
                     try:
-                        more, _ = self._sock.recvfrom(2048)
+                        more, more_sender = self._sock.recvfrom(2048)
                     except (BlockingIOError, OSError):
                         break
-                    batch.append(more)
+                    batch.append((more, more_sender))
             finally:
                 self._sock.settimeout(0.5)
-            cmds = []
-            for raw in batch:
+            parsed = []
+            for raw, (sender_ip, _) in batch:
                 try:
                     cmd = parse_packet(raw)
                 except ValueError as exc:
                     self.get_logger().warn(f"bad packet: {exc}")
                     continue
-                if cmd is not None:  # None = not a spawn/despawn/pose command
-                    cmds.append(cmd)
+                parsed.append((cmd, sender_ip))
+            # Wind messages are world-level and carry no entity ids: they are
+            # pulled out before the entity supersede loop below, which reads
+            # entity_id/type_code (a wind header would read as x500_0). The
+            # newest wind goes first (instant, while a spawn below can block
+            # for seconds); queries are answered after it, so the reply
+            # reflects this batch.
+            wind, askers, cmds = triage_batch(parsed)
+            if wind is not None:
+                self._handle_wind(wind)
+            for ip in askers:
+                self._reply_wind_state(ip)
             for idx, cmd in enumerate(cmds):
                 if not isinstance(cmd, DespawnCommand) and any(
                         not isinstance(later, DespawnCommand)
@@ -293,6 +352,48 @@ class ManagerNode(Node):
                         for later in cmds[idx + 1:]):
                     continue  # superseded by a newer pose for the same entity
                 self._handle_command(cmd, world, default_px4)
+
+    def _handle_wind(self, cmd):
+        """Relay a world wind command to gz (runs on the UDP listener thread)."""
+        vx, vy, vz = cmd.velocity
+        state = f"({vx:.2f}, {vy:.2f}, {vz:.2f}) m/s" if cmd.enable else "off"
+        if self._wind is None:
+            self.get_logger().warn(
+                f"UDP wind {state} ignored: publisher unavailable")
+            return
+        connected = self._wind.has_subscriber()
+        if not connected:
+            # WindEffects is the only expected subscriber; without it the
+            # message is dropped and nothing will move - say so loudly.
+            self.get_logger().warn(
+                f"UDP wind {state}: no subscriber on {self._wind.topic} - "
+                "is gz-sim-wind-effects-system in server.config?")
+        if self._wind.publish(cmd.enable, cmd.velocity):
+            if connected:
+                # Only a delivered command becomes the reported world state;
+                # a known-dropped one must not be answered to queries as truth.
+                self._wind_state = (cmd.enable, cmd.velocity)
+            self.get_logger().info(f"UDP wind: {state} -> {self._wind.topic}")
+        else:
+            self.get_logger().error(
+                f"UDP wind {state}: publish failed on {self._wind.topic}")
+
+    def _reply_wind_state(self, ip):
+        """Answer a wind query: the current world wind, to the asker's UE port.
+
+        Sent from the command socket (source port = spawn_udp_port); UE only
+        filters on the source IP, which is this host either way.
+        """
+        enable, velocity = self._wind_state
+        port = self.get_parameter('unreal_port').value
+        try:
+            self._sock.sendto(pack_wind(enable, velocity), (ip, port))
+        except OSError as exc:
+            self.get_logger().warn(f"wind state reply to {ip}:{port} failed: {exc}")
+            return
+        vx, vy, vz = velocity
+        state = f"({vx:.2f}, {vy:.2f}, {vz:.2f}) m/s" if enable else "off"
+        self.get_logger().info(f"wind state {state} -> {ip}:{port}")
 
     def _handle_command(self, cmd, world, default_px4):
         """Act on one parsed wire command (runs on the UDP listener thread)."""
@@ -397,8 +498,10 @@ def main(args=None):
     try:
         node.wait_for_clock()
         node.cleanup_leftovers()
-        node.spawn_all()
+        # Serve the command port before the boot fleet: its first vehicle
+        # streams to UE immediately and UE replies with a wind-state query.
         node.start_udp_listener()
+        node.spawn_all()
         rclpy.spin(node)  # keep node alive: hold vehicle handles + serve UDP
     except (KeyboardInterrupt, ExternalShutdownException, TimeoutError) as exc:
         # SIGINT/SIGTERM land here; the finally block runs the teardown

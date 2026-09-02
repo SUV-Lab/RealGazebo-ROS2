@@ -7,7 +7,7 @@
 
 services:
   gazebo:
-    image: aware4docker/realgazebo:1.2
+    image: ${MANAGER_IMAGE:-aware4docker/realgazebo:1.3-rc1}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - /dev:/dev
