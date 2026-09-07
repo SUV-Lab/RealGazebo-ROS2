@@ -1,12 +1,11 @@
 <?xml version="1.0"?>
-<sdf version='1.6'>
+<sdf version='1.10'>
   <model name='lc_62'>
     <pose>0 0 0.24 0 0 0</pose>
-    <static>false</static>
     <link name='base_link'>
-      <pose>0 0 0 0 0 0</pose>
       <!-- RealGazebo: let the WindEffects world system push this airframe -->
       <enable_wind>true</enable_wind>
+      <pose>-0.031204 -0.000834 0.005588 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>53.57</mass>
@@ -20,7 +19,7 @@
         </inertia>
       </inertial>
       <collision name='base_link_collision'>
-        <pose>0 0 -0.07 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <box>
             <size>2.1 2.2 0.5</size>
@@ -41,11 +40,11 @@
         </surface>
       </collision>
       <visual name='base_link_visual'>
-        <pose>-0.4 0 0 0 0 0</pose>
+        <pose>0.031204 0.000834 -0.005588 0 0 0</pose>
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://lc_62/meshes/body.dae</uri>
+            <uri>model://lc_62/meshes/LC62_Body.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -55,124 +54,22 @@
           </script>
         </material>
       </visual>
-      <visual name='m0'>
-        <pose>0 -0.7475 0.035 0 0 0</pose>
+      <visual name='kari_logo_visual'>
+        <pose>0.031204 0.000834 -0.005588 0 0 0</pose>
         <geometry>
-          <cylinder>
-            <length>0.035</length>
-            <radius>0.05</radius>
-          </cylinder>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/KARI_Logo_Wing_L.dae</uri>
+          </mesh>
         </geometry>
         <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
-        </material>
-      </visual>
-      <visual name='m1'>
-        <pose>0 0.7475 0.035 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <length>0.035</length>
-            <radius>0.05</radius>
-          </cylinder>
-        </geometry>
-        <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
-        </material>
-      </visual>
-      <visual name='m2'>
-        <pose>1.03 0.7475 0.035 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <length>0.035</length>
-            <radius>0.05</radius>
-          </cylinder>
-        </geometry>
-        <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
-        </material>
-      </visual>
-      <visual name='m3'>
-        <pose>-1.03 -0.7475 0.035 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <length>0.035</length>
-            <radius>0.05</radius>
-          </cylinder>
-        </geometry>
-        <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
-        </material>
-      </visual>
-      <visual name='m4'>
-        <pose>1.03 -0.7475 0.035 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <length>0.035</length>
-            <radius>0.05</radius>
-          </cylinder>
-        </geometry>
-        <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
-        </material>
-      </visual>
-      <visual name='m5'>
-        <pose>-1.03 0.7475 0.035 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <length>0.035</length>
-            <radius>0.05</radius>
-          </cylinder>
-        </geometry>
-        <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
-        </material>
-      </visual>
-      <visual name='m6'>
-        <pose>-0.492 1.145 0 0 1.57 0</pose>
-        <geometry>
-          <cylinder>
-            <length>0.225</length>
-            <radius>0.045</radius>
-          </cylinder>
-        </geometry>
-        <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
-        </material>
-      </visual>
-      <visual name='m7'>
-        <pose>-0.492 -1.145 0 0 1.57 0</pose>
-        <geometry>
-          <cylinder>
-            <length>0.225</length>
-            <radius>0.045</radius>
-          </cylinder>
-        </geometry>
-        <material>
-          <script>
-            <name>Gazebo/DarkGrey</name>
-            <uri>file://media/materials/scripts/gazebo.material</uri>
-          </script>
+          <diffuse>1.0 1.0 1.0</diffuse>
+          <specular>0.2 0.2 0.2</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://lc_62/materials/textures/kari_logo.png</albedo_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <gravity>1</gravity>
@@ -279,7 +176,7 @@
       </sensor>
     </link>
     <link name='rotor_0'>
-      <pose>0 -0.7475 0.06 0 0 0</pose>
+      <pose>0.087229 -0.725 0.077555 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -313,8 +210,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>2 2 2</scale>
-            <uri>model://lc_62/meshes/iris_prop_cw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Prop_1.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -341,11 +238,10 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
     <link name='rotor_1'>
-      <pose>0 0.7475 0.06 0 0 0</pose>
+      <pose>0.087667 0.72495 0.077553 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -379,8 +275,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>2 2 2</scale>
-            <uri>model://lc_62/meshes/iris_prop_ccw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Prop_2.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -407,11 +303,10 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
     <link name='rotor_2'>
-      <pose>1.03 0.7475 0.06 0 0 0</pose>
+      <pose>1.0928 0.71862 0.07732 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -445,8 +340,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>2 2 2</scale>
-            <uri>model://lc_62/meshes/iris_prop_cw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Prop_1.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -473,11 +368,10 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
     <link name='rotor_3'>
-      <pose>-1.03 -0.7475 0.06 0 0 0</pose>
+      <pose>-1.0122 -0.71893 -0.1006 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -511,8 +405,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>2 2 2</scale>
-            <uri>model://lc_62/meshes/iris_prop_ccw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Prop_2.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -539,11 +433,10 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
     <link name='rotor_4'>
-      <pose>1.03 -0.7475 0.06 0 0 0</pose>
+      <pose>1.0927 -0.71865 0.0773 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -577,8 +470,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>2 2 2</scale>
-            <uri>model://lc_62/meshes/iris_prop_ccw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Prop_2.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -605,11 +498,10 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
     <link name='rotor_5'>
-      <pose>-1.03 0.7475 0.06 0 0 0</pose>
+      <pose>-1.0126 0.71897 -0.10062 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -643,8 +535,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>2 2 2</scale>
-            <uri>model://lc_62/meshes/iris_prop_cw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Prop_1.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -671,12 +563,10 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
-
      <link name='left_rotor_puller'>
-      <pose>-0.61 1.145 0 0 1.57 0</pose>
+      <pose>-0.31765 1.1501 0.06681 0 1.57 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -690,7 +580,7 @@
         </inertia>
       </inertial>
       <collision name='left_rotor_puller_collision'>
-        <pose>0.0 0 -0.04 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <cylinder>
             <length>0.005</length>
@@ -710,8 +600,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>1.5 1.5 1.5</scale>
-            <uri>model://lc_62/meshes/iris_prop_ccw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Pusher_L.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -726,10 +616,11 @@
       <self_collide>0</self_collide>
     </link>
     <joint name='left_rotor_puller_joint' type='revolute'>
+      <pose>0.0 0 0.0 0 1.57 0</pose>
       <child>left_rotor_puller</child>
       <parent>base_link</parent>
       <axis>
-        <xyz>1 0 0</xyz>
+        <xyz expressed_in="__model__">1 0 0</xyz>
         <limit>
           <lower>-1e+16</lower>
           <upper>1e+16</upper>
@@ -738,12 +629,11 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
 
     <link name='right_rotor_puller'>
-      <pose>-0.61 -1.145 0 0 1.57 0</pose>
+      <pose>-0.31765 -1.1501 0.067296 0 1.57 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.005</mass>
@@ -757,7 +647,7 @@
         </inertia>
       </inertial>
       <collision name='right_rotor_puller_collision'>
-        <pose>0.0 0 -0.04 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <cylinder>
             <length>0.005</length>
@@ -777,8 +667,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <scale>1.5 1.5 1.5</scale>
-            <uri>model://lc_62/meshes/iris_prop_cw.dae</uri>
+            <scale>1 1 1</scale>
+            <uri>model://lc_62/meshes/Pusher_R.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -793,10 +683,11 @@
       <self_collide>0</self_collide>
     </link>
     <joint name='right_rotor_puller_joint' type='revolute'>
+      <pose>0.0 0 0.0 0 1.57 0</pose>
       <child>right_rotor_puller</child>
       <parent>base_link</parent>
       <axis>
-        <xyz>1 0 0</xyz>
+        <xyz expressed_in="__model__">1 0 0</xyz>
         <limit>
           <lower>-1e+16</lower>
           <upper>1e+16</upper>
@@ -805,14 +696,12 @@
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
         </dynamics>
-        <use_parent_model_frame>1</use_parent_model_frame>
       </axis>
     </joint>
-
     <link name="left_ail">
       <inertial>
-        <mass>0.00000001</mass>
-        <pose>0 0.6 0.05 0 0 0</pose>
+        <mass>0.0001</mass>
+        <pose>-0.506204 0.819956 0.068762 0 0 0</pose>
         <inertia>
           <ixx>0.000001</ixx>
           <ixy>0.0</ixy>
@@ -823,11 +712,11 @@
         </inertia>
       </inertial>
       <visual name='left_ail_visual'>
-        <pose>-0.4 0 0 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://lc_62/meshes/left_ail.dae</uri>
+            <uri>model://lc_62/meshes/Aileron_L.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -840,8 +729,8 @@
     </link>
     <link name="right_ail">
       <inertial>
-        <mass>0.00000001</mass>
-        <pose>0 -0.6 0.05 0 0 0</pose>
+        <mass>0.0001</mass>
+        <pose>-0.506204 -0.816144 0.068829 0 0 0</pose>
         <inertia>
           <ixx>0.000001</ixx>
           <ixy>0.0</ixy>
@@ -852,11 +741,11 @@
         </inertia>
       </inertial>
       <visual name='right_ail_visual'>
-        <pose>-0.4 0 0 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://lc_62/meshes/right_ail.dae</uri>
+            <uri>model://lc_62/meshes/Aileron_R.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -869,8 +758,8 @@
     </link>
     <link name="left_elevator">
       <inertial>
-        <mass>0.00000001</mass>
-        <pose> 0.5 0.35 0.05 0 0 0</pose>
+        <mass>0.0001</mass>
+        <pose>0.568796 0.517666 -0.013702 0 0 0</pose>
         <inertia>
           <ixx>0.000001</ixx>
           <ixy>0.0</ixy>
@@ -880,12 +769,12 @@
           <izz>0.000001</izz>
         </inertia>
       </inertial>
-      <visual name='left_elevator_left_visual'>
-        <pose>-0.4 0 0 0 0 0</pose>
+      <visual name='left_elevator_visual'>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://lc_62/meshes/left_ele.dae</uri>
+            <uri>model://lc_62/meshes/Elevator_L.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -898,8 +787,8 @@
     </link>
     <link name="right_elevator">
       <inertial>
-        <mass>0.00000001</mass>
-        <pose> 0.5 -0.35 0.05 0 0 0</pose>
+        <mass>0.0001</mass>
+        <pose>0.568796 -0.517834 -0.013871 0 0 0</pose>
         <inertia>
           <ixx>0.000001</ixx>
           <ixy>0.0</ixy>
@@ -910,11 +799,11 @@
         </inertia>
       </inertial>
       <visual name='right_elevator_visual'>
-        <pose>-0.4 0 0 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://lc_62/meshes/right_ele.dae</uri>
+            <uri>model://lc_62/meshes/Elevator_R.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -927,8 +816,8 @@
     </link>
     <link name="rudder">
       <inertial>
-        <mass>0.00000001</mass>
-        <pose>-0.5 0 0.05 0 0 0 </pose>
+        <mass>0.0001</mass>
+        <pose>-0.881204 -0.000834 0.191168 0 0 0</pose>
         <inertia>
           <ixx>0.000001</ixx>
           <ixy>0.0</ixy>
@@ -939,11 +828,11 @@
         </inertia>
       </inertial>
       <visual name='rudder_visual'>
-        <pose>-0.4 0 0 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://lc_62/meshes/rudder.dae</uri>
+            <uri>model://lc_62/meshes/Rudder.dae</uri>
           </mesh>
         </geometry>
         <material>
@@ -954,14 +843,14 @@
         </material>
       </visual>
     </link>
+
     <joint name='left_ail_joint' type='revolute'>
       <parent>base_link</parent>
       <child>left_ail</child>
-      <pose>-0.475 0.6 0 0 0 0</pose>
+      <pose>-0.506204 0.819956 0.068762 0 0 0</pose>
       <axis>
-        <xyz>0 1 0</xyz>
+        <xyz expressed_in="base_link">0 1 0</xyz>
         <limit>
-          <!-- -30/+30 deg. -->
           <lower>-0.53</lower>
           <upper>0.53</upper>
         </limit>
@@ -975,14 +864,14 @@
         </ode>
       </physics>
     </joint>
+
     <joint name='right_ail_joint' type='revolute'>
       <parent>base_link</parent>
       <child>right_ail</child>
-      <pose>-0.475 -0.6 0 0 0 0</pose>
+      <pose>-0.506204 -0.816144 0.068829 0 0 0</pose>
       <axis>
-        <xyz>0 1 0</xyz>
+        <xyz expressed_in="base_link">0 1 0</xyz>
         <limit>
-          <!-- -30/+30 deg. -->
           <lower>-0.53</lower>
           <upper>0.53</upper>
         </limit>
@@ -996,14 +885,14 @@
         </ode>
       </physics>
     </joint>
+
     <joint name='left_elevator_joint' type='revolute'>
       <parent>base_link</parent>
       <child>left_elevator</child>
-      <pose> 0.55 0.3 0 0 0 0</pose>
+      <pose>0.568796 0.517666 -0.013702 0 0 0</pose>
       <axis>
-        <xyz>0 -1 0</xyz>
+        <xyz expressed_in="base_link">0 1 0</xyz>
         <limit>
-          <!-- -30/+30 deg. -->
           <lower>-0.53</lower>
           <upper>0.53</upper>
         </limit>
@@ -1017,14 +906,14 @@
         </ode>
       </physics>
     </joint>
+
     <joint name='right_elevator_joint' type='revolute'>
       <parent>base_link</parent>
       <child>right_elevator</child>
-      <pose> 0.55 -0.3 0 0 0 0</pose>
+      <pose>0.568796 -0.517834 -0.013871 0 0 0</pose>
       <axis>
-        <xyz>0 -1 0</xyz>
+        <xyz expressed_in="base_link">0 1 0</xyz>
         <limit>
-          <!-- -30/+30 deg. -->
           <lower>-0.53</lower>
           <upper>0.53</upper>
         </limit>
@@ -1038,14 +927,14 @@
         </ode>
       </physics>
     </joint>
+
     <joint name='rudder_joint' type='revolute'>
       <parent>base_link</parent>
       <child>rudder</child>
-      <pose>-1 0 0 0 0 0</pose>
+      <pose>-0.881204 -0.000834 0.191168 0 0 0</pose>
       <axis>
-        <xyz>0 0 1</xyz>
+        <xyz expressed_in="base_link">-0.544 0 0.839</xyz>
         <limit>
-          <!-- -30/+30 deg. -->
           <lower>-0.53</lower>
           <upper>0.53</upper>
         </limit>
@@ -1160,7 +1049,7 @@
       <a0>0.0</a0>
       <cla>4.752798721</cla>
       <cda>0.6417112299</cda>
-      <cma>0.0.</cma>
+      <cma>0.0</cma>
       <alpha_stall>0.3391428111</alpha_stall>
       <cla_stall>-3.85</cla_stall>
       <cda_stall>-0.9233984055</cda_stall>
@@ -1254,7 +1143,7 @@
       <commandSubTopic>command/motor_speed</commandSubTopic>
       <motorNumber>4</motorNumber>
       <rotorDragCoefficient>0.00103207</rotorDragCoefficient>
-      <rollingMomentCoefficient>1e-04</rollingMomentCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
       <rotorVelocitySlowdownSim>20</rotorVelocitySlowdownSim>
       <motorType>velocity</motorType>
     </plugin>
@@ -1281,7 +1170,7 @@
       <timeConstantUp>0.0125</timeConstantUp>
       <timeConstantDown>0.025</timeConstantDown>
       <maxRotVelocity>3717.132428</maxRotVelocity>
-      <motorConstant>2.52692e-04</motorConstant>
+      <motorConstant>0.10e-04</motorConstant>
       <momentConstant>0.059683104</momentConstant>
       <commandSubTopic>command/motor_speed</commandSubTopic>
       <motorNumber>6</motorNumber>
@@ -1297,7 +1186,7 @@
       <timeConstantUp>0.0125</timeConstantUp>
       <timeConstantDown>0.025</timeConstantDown>
       <maxRotVelocity>3717.132428</maxRotVelocity>
-      <motorConstant>2.52692e-04</motorConstant>
+      <motorConstant>0.10e-04</motorConstant>
       <momentConstant>0.059683104</momentConstant>
       <commandSubTopic>command/motor_speed</commandSubTopic>
       <motorNumber>7</motorNumber>
@@ -1346,5 +1235,6 @@
         <moveableLink name="rudder"/>
       </moveableLinkList>
     </plugin>
+    <static>0</static>
   </model>
 </sdf>

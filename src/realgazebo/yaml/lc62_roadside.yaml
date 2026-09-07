@@ -1,0 +1,10 @@
+# lc62_roadside.yaml — one LC-62 parked on the roadside (rover 5 slot of sitl.yaml)
+
+px4_target:
+  0 : /home/user/realgazebo/RealGazebo-PX4
+
+vehicles:
+  0 :
+    type : lc_62
+    build_target : 0
+    spawnpoint : (25.8707, 14.751, -0.6, -3.14)
