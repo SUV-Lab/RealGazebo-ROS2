@@ -271,9 +271,14 @@ class ManagerNode(Node):
                 f"wind commands disabled: gz python bindings unusable ({exc!r})")
             return
         if connected:
+            # WindEffects starts enabled: even at zero wind its force term
+            # damps every <enable_wind> link (F = m*k*(wind - v)). Start the
+            # world with the wind OFF so "no wind" really means no force
+            # until a command arrives.
+            self._wind.publish(False, (0.0, 0.0, 0.0))
             self.get_logger().info(
                 f"wind publisher ready on {self._wind.topic} "
-                "(WindEffects connected)")
+                "(WindEffects connected, wind off)")
         else:
             self.get_logger().warn(
                 f"wind publisher on {self._wind.topic} has no subscriber - "
@@ -368,7 +373,17 @@ class ManagerNode(Node):
             self.get_logger().warn(
                 f"UDP wind {state}: no subscriber on {self._wind.topic} - "
                 "is gz-sim-wind-effects-system in server.config?")
-        if self._wind.publish(cmd.enable, cmd.velocity):
+        # OFF is published as enable_wind=true with a ZERO velocity, never as
+        # enable_wind=false: WindEffects follows the commanded wind through a
+        # ~1 s low-pass filter and, once disabled, freezes the wind entity's
+        # velocity at whatever it had reached - which LiftDrag (fixed-wing /
+        # VTOL airframes) keeps subtracting as wind. A zero command instead
+        # decays to zero within a few seconds. The leftover point-mass term on
+        # <enable_wind> links at zero wind is m*k*v (0.2 N per m/s for an
+        # x500 at k=0.1) - accepted.
+        published = self._wind.publish(
+            True, cmd.velocity if cmd.enable else (0.0, 0.0, 0.0))
+        if published:
             if connected:
                 # Only a delivered command becomes the reported world state;
                 # a known-dropped one must not be answered to queries as truth.
